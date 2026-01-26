@@ -979,6 +979,42 @@ async def get_me(request: Request):
     user = await require_auth(request)
     return user.dict()
 
+
+@api_router.post("/auth/dev-login")
+async def dev_login(response: Response):
+    """Development-only endpoint to create a test session"""
+    user_id = "dev_user_test"
+    email = "dev@test.com"
+    
+    # Create or find dev user
+    existing_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not existing_user:
+        new_user = {
+            "user_id": user_id,
+            "email": email,
+            "name": "Dev Tester",
+            "picture": None,
+            "created_at": datetime.now(timezone.utc),
+            "capital": 100000.0,
+            "risk_profile": "medium"
+        }
+        await db.users.insert_one(new_user)
+        existing_user = new_user
+    
+    # Create session token
+    session_token = f"dev_session_{uuid.uuid4().hex[:16]}"
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    
+    await db.user_sessions.delete_many({"user_id": user_id})
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": expires_at,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    return {"success": True, "user": existing_user, "session_token": session_token}
+
 @api_router.post("/auth/session")
 async def create_session(request: Request, response: Response):
     body = await request.json()
