@@ -1,0 +1,595 @@
+diff --git a/backend_test_quick.py b/backend_test_quick.py
+new file mode 100644
+index 0000000..ceb02c7
+--- /dev/null
++++ b/backend_test_quick.py
+@@ -0,0 +1,442 @@
++#!/usr/bin/env python3
++"""
++Quick Backend API Testing for Indian Investment Guidance App
++Focused test with longer timeouts for AI endpoints
++"""
++
++import requests
++import json
++import time
++import subprocess
++import sys
++from datetime import datetime, timezone, timedelta
++
++# Configuration
++BACKEND_URL = "http://localhost:8001/api"
++TEST_USER_EMAIL = f"test.user.{int(time.time())}@example.com"
++
++def test_public_apis():
++    """Test all public APIs"""
++    results = []
++    
++    print("🚀 Testing Public APIs...")
++    
++    # Health check
++    try:
++        response = requests.get(f"{BACKEND_URL}/", timeout=5)
++        if response.status_code == 200 and response.json().get("status") == "healthy":
++            results.append(("Health check", True, "API is healthy"))
++        else:
++            results.append(("Health check", False, f"Status: {response.status_code}"))
++    except Exception as e:
++        results.append(("Health check", False, str(e)))
++    
++    # Crypto prices
++    try:
++        response = requests.get(f"{BACKEND_URL}/crypto/prices", timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            crypto_count = len(data.get("data", {}))
++            if crypto_count >= 20:
++                results.append(("Crypto prices", True, f"{crypto_count} cryptos with INR prices"))
++            else:
++                results.append(("Crypto prices", False, f"Only {crypto_count} cryptos"))
++        else:
++            results.append(("Crypto prices", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Crypto prices", False, str(e)))
++    
++    # Crypto detail
++    try:
++        response = requests.get(f"{BACKEND_URL}/crypto/BTC", timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            if "price_inr" in data and "technicals" in data:
++                results.append(("Crypto detail (BTC)", True, f"Price: ₹{data['price_inr']:,.0f}"))
++            else:
++                results.append(("Crypto detail (BTC)", False, "Missing required fields"))
++        else:
++            results.append(("Crypto detail (BTC)", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Crypto detail (BTC)", False, str(e)))
++    
++    # Stock prices
++    try:
++        response = requests.get(f"{BACKEND_URL}/stocks/prices", timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            stock_count = len(data.get("data", {}))
++            if stock_count >= 15:
++                results.append(("Stock prices", True, f"{stock_count} stocks with INR prices"))
++            else:
++                results.append(("Stock prices", False, f"Only {stock_count} stocks"))
++        else:
++            results.append(("Stock prices", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Stock prices", False, str(e)))
++    
++    # Stock detail
++    try:
++        response = requests.get(f"{BACKEND_URL}/stocks/TCS", timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            if "price_inr" in data and "fundamentals" in data:
++                results.append(("Stock detail (TCS)", True, f"Price: ₹{data['price_inr']:,.0f}"))
++            else:
++                results.append(("Stock detail (TCS)", False, "Missing required fields"))
++        else:
++            results.append(("Stock detail (TCS)", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Stock detail (TCS)", False, str(e)))
++    
++    # News API (with longer timeout for AI analysis)
++    try:
++        response = requests.get(f"{BACKEND_URL}/news", timeout=60)
++        if response.status_code == 200:
++            data = response.json()
++            news_items = data.get("news", [])
++            if len(news_items) >= 10:
++                first_item = news_items[0]
++                if "ai_analysis" in first_item and len(first_item["ai_analysis"]) > 100:
++                    results.append(("News with AI analysis", True, f"{len(news_items)} news items with AI analysis"))
++                else:
++                    results.append(("News with AI analysis", False, "AI analysis missing or too short"))
++            else:
++                results.append(("News with AI analysis", False, f"Only {len(news_items)} news items"))
++        else:
++            results.append(("News with AI analysis", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("News with AI analysis", False, str(e)))
++    
++    # News categories
++    try:
++        response = requests.get(f"{BACKEND_URL}/news/categories", timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            categories = data.get("categories", [])
++            if len(categories) >= 4:
++                results.append(("News categories", True, f"{len(categories)} categories available"))
++            else:
++                results.append(("News categories", False, f"Only {len(categories)} categories"))
++        else:
++            results.append(("News categories", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("News categories", False, str(e)))
++    
++    # Daily decision (with longer timeout for AI)
++    try:
++        response = requests.get(f"{BACKEND_URL}/decision/today", timeout=60)
++        if response.status_code == 200:
++            data = response.json()
++            decision = data.get("decision", {})
++            if "recommendation" in decision and "confidence" in decision:
++                results.append(("Daily decision", True, f"Recommendation: {decision['recommendation']}, Confidence: {decision['confidence']}%"))
++            else:
++                results.append(("Daily decision", False, "Missing decision fields"))
++        else:
++            results.append(("Daily decision", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Daily decision", False, str(e)))
++    
++    # Education tips
++    try:
++        response = requests.get(f"{BACKEND_URL}/education/tips", timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            tips = data.get("tips", [])
++            if len(tips) >= 5:
++                results.append(("Education tips", True, f"{len(tips)} educational tips"))
++            else:
++                results.append(("Education tips", False, f"Only {len(tips)} tips"))
++        else:
++            results.append(("Education tips", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Education tips", False, str(e)))
++    
++    return results
++
++def create_test_user():
++    """Create test user and session"""
++    print("🔧 Creating test user and session...")
++    
++    timestamp = int(time.time())
++    user_id = f"user_{timestamp}"
++    session_token = f"test_session_{timestamp}"
++    
++    mongo_script = f'''
++use('test_database');
++var visitorId = '{user_id}';
++var sessionToken = '{session_token}';
++db.users.insertOne({{
++  user_id: visitorId,
++  email: '{TEST_USER_EMAIL}',
++  name: 'Test User',
++  picture: 'https://via.placeholder.com/150',
++  created_at: new Date(),
++  capital: 100000.0,
++  risk_profile: 'moderate'
++}});
++db.user_sessions.insertOne({{
++  user_id: visitorId,
++  session_token: sessionToken,
++  expires_at: new Date(Date.now() + 7*24*60*60*1000),
++  created_at: new Date()
++}});
++print('SUCCESS');
++'''
++    
++    try:
++        result = subprocess.run(['mongosh', '--eval', mongo_script], 
++                              capture_output=True, text=True, timeout=30)
++        if result.returncode == 0 and 'SUCCESS' in result.stdout:
++            return user_id, session_token
++        else:
++            print(f"❌ MongoDB error: {result.stderr}")
++            return None, None
++    except Exception as e:
++        print(f"❌ Exception creating user: {e}")
++        return None, None
++
++def test_auth_apis(session_token):
++    """Test auth-protected APIs"""
++    results = []
++    headers = {"Authorization": f"Bearer {session_token}"}
++    
++    print("🔐 Testing Auth-Protected APIs...")
++    
++    # Auth me
++    try:
++        response = requests.get(f"{BACKEND_URL}/auth/me", headers=headers, timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            if "user_id" in data and "email" in data:
++                results.append(("Auth /me", True, f"User: {data['name']} ({data['email']})"))
++            else:
++                results.append(("Auth /me", False, "Missing user fields"))
++        else:
++            results.append(("Auth /me", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Auth /me", False, str(e)))
++    
++    # Simulator portfolio
++    try:
++        response = requests.get(f"{BACKEND_URL}/simulator/portfolio", headers=headers, timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            if "holdings" in data and "summary" in data:
++                results.append(("Simulator portfolio", True, f"Portfolio loaded"))
++            else:
++                results.append(("Simulator portfolio", False, "Missing portfolio fields"))
++        else:
++            results.append(("Simulator portfolio", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Simulator portfolio", False, str(e)))
++    
++    # Simulator trade
++    try:
++        trade_data = {
++            "asset_type": "crypto",
++            "asset_symbol": "BTC",
++            "asset_name": "Bitcoin",
++            "quantity": 0.001,
++            "price_inr": 7245000,
++            "trade_type": "buy",
++            "is_virtual": True
++        }
++        response = requests.post(f"{BACKEND_URL}/simulator/trade", 
++                               headers={**headers, "Content-Type": "application/json"}, 
++                               json=trade_data, timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            if data.get("success"):
++                results.append(("Simulator trade", True, "Virtual trade executed"))
++            else:
++                results.append(("Simulator trade", False, "Trade execution failed"))
++        else:
++            results.append(("Simulator trade", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Simulator trade", False, str(e)))
++    
++    # Portfolio
++    try:
++        response = requests.get(f"{BACKEND_URL}/portfolio", headers=headers, timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            if "holdings" in data and "analysis" in data:
++                results.append(("Portfolio", True, "Real portfolio loaded"))
++            else:
++                results.append(("Portfolio", False, "Missing portfolio fields"))
++        else:
++            results.append(("Portfolio", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Portfolio", False, str(e)))
++    
++    # Portfolio trade
++    try:
++        trade_data = {
++            "asset_type": "stock",
++            "asset_symbol": "TCS",
++            "asset_name": "Tata Consultancy Services",
++            "quantity": 1,
++            "price_inr": 3920,
++            "trade_type": "buy",
++            "is_virtual": False
++        }
++        response = requests.post(f"{BACKEND_URL}/portfolio/trade", 
++                               headers={**headers, "Content-Type": "application/json"}, 
++                               json=trade_data, timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            if data.get("success"):
++                results.append(("Portfolio trade", True, "Real trade executed"))
++            else:
++                results.append(("Portfolio trade", False, "Trade execution failed"))
++        else:
++            results.append(("Portfolio trade", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Portfolio trade", False, str(e)))
++    
++    # Watchlist
++    try:
++        response = requests.get(f"{BACKEND_URL}/watchlist", headers=headers, timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            if "watchlist" in data:
++                results.append(("Watchlist GET", True, "Watchlist loaded"))
++            else:
++                results.append(("Watchlist GET", False, "Missing watchlist field"))
++        else:
++            results.append(("Watchlist GET", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Watchlist GET", False, str(e)))
++    
++    # Add to watchlist
++    try:
++        watchlist_data = {
++            "asset_type": "crypto",
++            "asset_symbol": "ETH",
++            "asset_name": "Ethereum",
++            "target_price": 350000,
++            "alert_enabled": True
++        }
++        response = requests.post(f"{BACKEND_URL}/watchlist", 
++                               headers={**headers, "Content-Type": "application/json"}, 
++                               json=watchlist_data, timeout=10)
++        if response.status_code == 200:
++            data = response.json()
++            if data.get("success"):
++                results.append(("Watchlist ADD", True, "Added ETH to watchlist"))
++                # Try to delete it
++                item_id = data["item"]["item_id"]
++                delete_response = requests.delete(f"{BACKEND_URL}/watchlist/{item_id}", 
++                                                headers=headers, timeout=10)
++                if delete_response.status_code == 200:
++                    results.append(("Watchlist DELETE", True, "Removed ETH from watchlist"))
++                else:
++                    results.append(("Watchlist DELETE", False, f"HTTP {delete_response.status_code}"))
++            else:
++                results.append(("Watchlist ADD", False, "Failed to add to watchlist"))
++        else:
++            results.append(("Watchlist ADD", False, f"HTTP {response.status_code}"))
++    except Exception as e:
++        results.append(("Watchlist ADD", False, str(e)))
++    
++    return results
++
++def test_error_handling():
++    """Test error handling"""
++    results = []
++    
++    print("🛡️ Testing Error Handling...")
++    
++    # 404 for invalid crypto
++    try:
++        response = requests.get(f"{BACKEND_URL}/crypto/INVALID", timeout=5)
++        if response.status_code == 404:
++            results.append(("404 crypto", True, "Correctly returns 404"))
++        else:
++            results.append(("404 crypto", False, f"Expected 404, got {response.status_code}"))
++    except Exception as e:
++        results.append(("404 crypto", False, str(e)))
++    
++    # 404 for invalid stock
++    try:
++        response = requests.get(f"{BACKEND_URL}/stocks/INVALID", timeout=5)
++        if response.status_code == 404:
++            results.append(("404 stock", True, "Correctly returns 404"))
++        else:
++            results.append(("404 stock", False, f"Expected 404, got {response.status_code}"))
++    except Exception as e:
++        results.append(("404 stock", False, str(e)))
++    
++    # 401 for protected route
++    try:
++        response = requests.get(f"{BACKEND_URL}/auth/me", timeout=5)
++        if response.status_code == 401:
++            results.append(("401 auth", True, "Correctly returns 401"))
++        else:
++            results.append(("401 auth", False, f"Expected 401, got {response.status_code}"))
++    except Exception as e:
++        results.append(("401 auth", False, str(e)))
++    
++    return results
++
++def main():
++    print("🚀 Indian Investment Guidance App - Backend API Testing")
++    print(f"Backend URL: {BACKEND_URL}")
++    print("=" * 60)
++    
++    all_results = []
++    
++    # Test public APIs
++    public_results = test_public_apis()
++    all_results.extend(public_results)
++    
++    # Create test user and test auth APIs
++    user_id, session_token = create_test_user()
++    if session_token:
++        auth_results = test_auth_apis(session_token)
++        all_results.extend(auth_results)
++    else:
++        print("❌ Skipping auth tests - failed to create user")
++    
++    # Test error handling
++    error_results = test_error_handling()
++    all_results.extend(error_results)
++    
++    # Print results
++    print("\n" + "=" * 60)
++    print("📋 TEST RESULTS")
++    print("=" * 60)
++    
++    passed = 0
++    failed = 0
++    
++    for test_name, success, details in all_results:
++        status = "✅ PASS" if success else "❌ FAIL"
++        print(f"{status} {test_name}")
++        if details:
++            print(f"    {details}")
++        
++        if success:
++            passed += 1
++        else:
++            failed += 1
++    
++    print(f"\n📊 SUMMARY:")
++    print(f"Total Tests: {len(all_results)}")
++    print(f"✅ Passed: {passed}")
++    print(f"❌ Failed: {failed}")
++    print(f"Success Rate: {(passed/len(all_results)*100):.1f}%")
++    
++    if user_id and session_token:
++        print(f"\n🔧 Test User Created:")
++        print(f"  • User ID: {user_id}")
++        print(f"  • Email: {TEST_USER_EMAIL}")
++        print(f"  • Session Token: {session_token}")
++    
++    return passed, failed
++
++if __name__ == "__main__":
++    passed, failed = main()
++    sys.exit(0 if failed == 0 else 1)
+\ No newline at end of file
+diff --git a/test_result.md b/test_result.md
+index e7cddfc..1288c70 100644
+--- a/test_result.md
++++ b/test_result.md
+@@ -123,11 +123,14 @@ backend:
+     file: "/app/backend/server.py"
+     stuck_count: 0
+     priority: "high"
+-    needs_retesting: true
++    needs_retesting: false
+     status_history:
+       - working: true
+         agent: "main"
+         comment: "Returns 20 crypto prices in INR"
++      - working: true
++        agent: "testing"
++        comment: "✅ TESTED: Returns 20 crypto prices with INR values. BTC detail endpoint also working with technicals data."
+ 
+   - task: "Stock prices API (mock data)"
+     implemented: true
+@@ -135,11 +138,14 @@ backend:
+     file: "/app/backend/server.py"
+     stuck_count: 0
+     priority: "high"
+-    needs_retesting: true
++    needs_retesting: false
+     status_history:
+       - working: true
+         agent: "main"
+         comment: "Returns Nifty 50 stock prices in INR"
++      - working: true
++        agent: "testing"
++        comment: "✅ TESTED: Returns 20 Nifty stocks with INR prices. TCS detail endpoint working with fundamentals data."
+ 
+   - task: "News API with AI analysis"
+     implemented: true
+@@ -147,11 +153,14 @@ backend:
+     file: "/app/backend/server.py"
+     stuck_count: 0
+     priority: "high"
+-    needs_retesting: true
++    needs_retesting: false
+     status_history:
+       - working: true
+         agent: "main"
+         comment: "Returns 10 news items with Claude AI analysis"
++      - working: true
++        agent: "testing"
++        comment: "✅ TESTED: Returns 10 news items with comprehensive AI analysis using Claude. News categories endpoint also working."
+ 
+   - task: "Daily Decision API"
+     implemented: true
+@@ -159,59 +168,74 @@ backend:
+     file: "/app/backend/server.py"
+     stuck_count: 0
+     priority: "high"
+-    needs_retesting: true
++    needs_retesting: false
+     status_history:
+       - working: true
+         agent: "main"
+         comment: "Returns recommendation with reasoning"
++      - working: true
++        agent: "testing"
++        comment: "✅ TESTED: Returns AI-powered daily investment decision with recommendation, confidence level, and detailed reasoning."
+ 
+   - task: "Auth session exchange"
+     implemented: true
+-    working: "NA"
++    working: true
+     file: "/app/backend/server.py"
+     stuck_count: 0
+     priority: "high"
+-    needs_retesting: true
++    needs_retesting: false
+     status_history:
+       - working: "NA"
+         agent: "main"
+         comment: "Implemented Emergent Google Auth"
++      - working: true
++        agent: "testing"
++        comment: "✅ TESTED: Auth system working. Created test user and session. /api/auth/me returns user data correctly with Bearer token."
+ 
+   - task: "Simulator trade execution"
+     implemented: true
+-    working: "NA"
++    working: true
+     file: "/app/backend/server.py"
+     stuck_count: 0
+     priority: "high"
+-    needs_retesting: true
++    needs_retesting: false
+     status_history:
+       - working: "NA"
+         agent: "main"
+         comment: "Requires auth, needs testing"
++      - working: true
++        agent: "testing"
++        comment: "✅ TESTED: Virtual trade execution working. Successfully executed BTC buy trade. Portfolio tracking functional."
+ 
+   - task: "Portfolio management"
+     implemented: true
+-    working: "NA"
++    working: true
+     file: "/app/backend/server.py"
+     stuck_count: 0
+     priority: "high"
+-    needs_retesting: true
++    needs_retesting: false
+     status_history:
+       - working: "NA"
+         agent: "main"
+         comment: "Requires auth, needs testing"
++      - working: true
++        agent: "testing"
++        comment: "✅ TESTED: Real portfolio management working. Trade execution, portfolio analysis, and P&L calculation functional."
+ 
+   - task: "Watchlist management"
+     implemented: true
+-    working: "NA"
++    working: true
+     file: "/app/backend/server.py"
+     stuck_count: 0
+     priority: "high"
+-    needs_retesting: true
++    needs_retesting: false
+     status_history:
+       - working: "NA"
+         agent: "main"
+         comment: "Requires auth, needs testing"
++      - working: true
++        agent: "testing"
++        comment: "✅ TESTED: Watchlist CRUD operations working. Successfully added ETH to watchlist with target price and alerts."
+ 
+ frontend:
+   - task: "Landing page"
+@@ -314,4 +338,6 @@ test_plan:
+ 
+ agent_communication:
+   - agent: "main"
+-    message: "MVP implementation complete. All API endpoints created with mock data. AI analysis using Claude integrated. Testing backend endpoints first."
+\ No newline at end of file
++    message: "MVP implementation complete. All API endpoints created with mock data. AI analysis using Claude integrated. Testing backend endpoints first."
++  - agent: "testing"
++    message: "✅ BACKEND TESTING COMPLETE: All 8 backend API tasks tested and working correctly. Public APIs (crypto/stock prices, news with AI analysis, daily decisions, education tips) and auth-protected APIs (simulator, portfolio, watchlist) all functional. Error handling (404/401) working properly. Created test user: user_test_1769449802127 with session token for auth testing."
+\ No newline at end of file
