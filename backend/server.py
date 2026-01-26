@@ -834,8 +834,8 @@ async def get_stock_detail(symbol: str):
 # ==================== NEWS ROUTES ====================
 
 @api_router.get("/news")
-async def get_news(category: Optional[str] = None, search: Optional[str] = None):
-    """Get news with optional filtering"""
+async def get_news(category: Optional[str] = None, search: Optional[str] = None, use_ai: bool = False):
+    """Get news with optional filtering. Set use_ai=true for real AI analysis (slower)."""
     news = MOCK_NEWS_DATA.copy()
     
     if category:
@@ -845,10 +845,13 @@ async def get_news(category: Optional[str] = None, search: Optional[str] = None)
         search_lower = search.lower()
         news = [n for n in news if search_lower in n["title"].lower() or search_lower in n["summary"].lower()]
     
-    # Generate AI analysis for each news item
+    # Generate analysis for each news item
     news_with_analysis = []
     for item in news[:10]:
-        analysis = await generate_ai_analysis(item)
+        if use_ai:
+            analysis = await generate_ai_analysis(item)
+        else:
+            analysis = generate_mock_analysis(item)
         news_with_analysis.append({
             **item,
             "published_at": item["published_at"].isoformat(),
