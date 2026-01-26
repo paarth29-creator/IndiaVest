@@ -1415,14 +1415,14 @@ If market conditions are unfavorable, consider:
 {DISCLAIMER}"""
     
     return {
-        "should_trade": should_trade,
-        "confidence": confidence,
-        "score": total_score,
+        "should_trade": bool(should_trade),
+        "confidence": float(confidence),
+        "score": float(total_score),
         "market_conditions": {
-            "total_volume_usd": total_volume / USD_TO_INR,
-            "avg_volatility": round(avg_volatility, 2),
-            "liquid_coins_count": len(liquid_coins),
-            "is_good_hours": is_good_hours,
+            "total_volume_usd": float(total_volume / USD_TO_INR),
+            "avg_volatility": float(round(avg_volatility, 2)),
+            "liquid_coins_count": int(len(liquid_coins)),
+            "is_good_hours": bool(is_good_hours),
             "ist_time": ist_now.strftime("%H:%M IST")
         },
         "top_5_recommendations": recommendations,
