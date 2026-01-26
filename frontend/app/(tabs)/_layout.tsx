@@ -24,14 +24,14 @@ export default function TabLayout() {
           backgroundColor: '#1a1a2e',
           borderTopColor: '#2d2d44',
           borderTopWidth: 1,
-          height: Platform.OS === 'ios' ? 85 : 65,
+          height: Platform.OS === 'ios' ? 85 : 70,
           paddingBottom: Platform.OS === 'ios' ? 25 : 10,
-          paddingTop: 10,
+          paddingTop: 8,
         },
         tabBarActiveTintColor: '#6366f1',
         tabBarInactiveTintColor: '#6b7280',
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: '500',
         },
       }}
@@ -55,6 +55,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="daytrading"
+        options={{
+          title: 'Day Trade',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="flash-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="simulator"
         options={{
           title: 'Simulator',
@@ -70,6 +79,16 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="wallet-outline" size={size} color={color} />
           ),
+        }}
+      />
+      <Tabs.Screen
+        name="highrisk"
+        options={{
+          title: 'High Risk',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="flame-outline" size={size} color="#ef4444" />
+          ),
+          tabBarActiveTintColor: '#ef4444',
         }}
       />
       <Tabs.Screen
