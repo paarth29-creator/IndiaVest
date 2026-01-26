@@ -994,12 +994,12 @@ async def dev_login(response: Response):
             "email": email,
             "name": "Dev Tester",
             "picture": None,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "capital": 100000.0,
             "risk_profile": "medium"
         }
         await db.users.insert_one(new_user)
-        existing_user = new_user
+        existing_user = {k: v for k, v in new_user.items() if k != "_id"}
     
     # Create session token
     session_token = f"dev_session_{uuid.uuid4().hex[:16]}"
@@ -1013,7 +1013,10 @@ async def dev_login(response: Response):
         "created_at": datetime.now(timezone.utc)
     })
     
-    return {"success": True, "user": existing_user, "session_token": session_token}
+    # Convert datetime in user response
+    user_response = {k: (str(v) if isinstance(v, datetime) else v) for k, v in existing_user.items()}
+    
+    return {"success": True, "user": user_response, "session_token": session_token}
 
 @api_router.post("/auth/session")
 async def create_session(request: Request, response: Response):
