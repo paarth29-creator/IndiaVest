@@ -875,8 +875,8 @@ async def get_news_categories():
 # ==================== DAILY DECISION ROUTES ====================
 
 @api_router.get("/decision/today")
-async def get_daily_decision():
-    """Get today's investment decision"""
+async def get_daily_decision(use_ai: bool = False):
+    """Get today's investment decision. Set use_ai=true for real AI analysis (slower)."""
     # Prepare market data
     market_data = {
         "btc_price": MOCK_CRYPTO_DATA["BTC"]["price_inr"],
@@ -893,7 +893,10 @@ async def get_daily_decision():
     # Prepare news summary
     news_summary = "\n".join([f"- {n['title']}" for n in MOCK_NEWS_DATA[:5]])
     
-    decision = await generate_daily_decision(market_data, news_summary)
+    if use_ai:
+        decision = await generate_daily_decision(market_data, news_summary)
+    else:
+        decision = generate_mock_decision(market_data)
     
     return {
         "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
