@@ -48,23 +48,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuth = async () => {
     try {
+      console.log('Checking auth...');
       const token = await AsyncStorage.getItem('session_token');
+      console.log('Token from storage:', token ? 'found' : 'not found');
+      
       if (token) {
         const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
         });
+        console.log('Auth response status:', response.status);
+        
         if (response.ok) {
           const userData = await response.json();
+          console.log('User authenticated:', userData.name);
           setUser(userData);
         } else {
+          console.log('Auth failed, clearing token');
           await AsyncStorage.removeItem('session_token');
         }
+      } else {
+        console.log('No token found');
       }
     } catch (error) {
       console.error('Auth check error:', error);
     } finally {
+      console.log('Auth check complete, setting isLoading to false');
       setIsLoading(false);
     }
   };
