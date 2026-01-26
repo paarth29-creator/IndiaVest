@@ -123,11 +123,14 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "Returns 20 crypto prices in INR"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Returns 20 crypto prices with INR values. BTC detail endpoint also working with technicals data."
 
   - task: "Stock prices API (mock data)"
     implemented: true
