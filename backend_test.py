@@ -656,7 +656,7 @@ print('User ID: ' + visitorId);
         self.test_error_handling()
         
         # Summary
-        self.print_summary()
+        return self.print_summary()
     
     def print_summary(self):
         """Print test summary"""
