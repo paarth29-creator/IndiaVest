@@ -13,7 +13,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional
 
 # Configuration
-BACKEND_URL = "https://indianinvest.preview.emergentagent.com/api"
+BACKEND_URL = "http://localhost:8001/api"
 TEST_USER_EMAIL = f"test.user.{int(time.time())}@example.com"
 TEST_USER_NAME = "Test User"
 
