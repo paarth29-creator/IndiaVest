@@ -1320,7 +1320,7 @@ async def should_day_trade_crypto(risk_profile: str = "medium"):
     
     # Analyze market conditions
     total_volume = sum(c.get("volume_24h", 0) for c in crypto_prices.values())
-    avg_volatility = np.mean([abs(c.get("change_24h", 0)) for c in crypto_prices.values()])
+    avg_volatility = float(np.mean([abs(c.get("change_24h", 0)) for c in crypto_prices.values()]))
     
     # Get top liquid coins
     liquid_coins = []
@@ -1330,15 +1330,15 @@ async def should_day_trade_crypto(risk_profile: str = "medium"):
             liquid_coins.append({
                 "symbol": symbol,
                 "name": data.get("name", symbol),
-                "price_inr": data.get("price_inr", 0),
-                "change_24h": data.get("change_24h", 0),
-                "volume_24h": data.get("volume_24h", 0),
-                "volume_usd": volume_usd
+                "price_inr": float(data.get("price_inr", 0)),
+                "change_24h": float(data.get("change_24h", 0)),
+                "volume_24h": float(data.get("volume_24h", 0)),
+                "volume_usd": float(volume_usd)
             })
     
     # Calculate day trading score
     liquidity_score = min(len(liquid_coins) * 10, 40)
-    volatility_score = min(avg_volatility * 10, 30) if avg_volatility > 1.5 else avg_volatility * 5
+    volatility_score = float(min(avg_volatility * 10, 30) if avg_volatility > 1.5 else avg_volatility * 5)
     
     risk_mult = RISK_MULTIPLIERS.get(risk_profile, RISK_MULTIPLIERS["medium"])
     
@@ -1347,17 +1347,17 @@ async def should_day_trade_crypto(risk_profile: str = "medium"):
     is_good_hours = 9 <= ist_now.hour <= 23  # Active trading hours
     hours_score = 20 if is_good_hours else 5
     
-    total_score = liquidity_score + volatility_score + hours_score
-    should_trade = total_score > 50 and avg_volatility > 1.5
-    confidence = min(total_score, 85)
+    total_score = float(liquidity_score + volatility_score + hours_score)
+    should_trade = bool(total_score > 50 and avg_volatility > 1.5)
+    confidence = float(min(total_score, 85))
     
     # Top 5 recommendations
     top_coins = sorted(liquid_coins, key=lambda x: abs(x["change_24h"]) * x["volume_usd"], reverse=True)[:5]
     
     recommendations = []
     for coin in top_coins:
-        price = coin["price_inr"]
-        volatility = abs(coin["change_24h"])
+        price = float(coin["price_inr"])
+        volatility = float(abs(coin["change_24h"]))
         
         # Calculate entry, stop-loss, take-profit
         entry_low = price * 0.995
@@ -1371,8 +1371,8 @@ async def should_day_trade_crypto(risk_profile: str = "medium"):
             "symbol": coin["symbol"],
             "name": coin["name"],
             "current_price_inr": round(price, 2),
-            "change_24h": round(coin["change_24h"], 2),
-            "volume_24h_inr": coin["volume_24h"],
+            "change_24h": round(float(coin["change_24h"]), 2),
+            "volume_24h_inr": float(coin["volume_24h"]),
             "entry_range": {"low": round(entry_low, 2), "high": round(entry_high, 2)},
             "stop_loss": round(stop_loss, 2),
             "stop_loss_pct": round((1 - stop_loss/price) * 100, 1),
