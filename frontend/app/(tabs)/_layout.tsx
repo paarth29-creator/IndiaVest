@@ -1,7 +1,7 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, View } from 'react-native';
+import { Platform } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
 import { Redirect } from 'expo-router';
 
@@ -55,20 +55,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="daytrading"
+        name="trade"
         options={{
-          title: 'Day Trade',
+          title: 'Trade',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="flash-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="simulator"
-        options={{
-          title: 'Simulator',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="flask-outline" size={size} color={color} />
+            <Ionicons name="stats-chart" size={size} color={color} />
           ),
         }}
       />
@@ -82,22 +73,31 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="highrisk"
-        options={{
-          title: 'High Risk',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="flame-outline" size={size} color="#ef4444" />
-          ),
-          tabBarActiveTintColor: '#ef4444',
-        }}
-      />
-      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
           ),
+        }}
+      />
+      {/* Hide old standalone screens from tab bar */}
+      <Tabs.Screen
+        name="simulator"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="daytrading"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="highrisk"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
