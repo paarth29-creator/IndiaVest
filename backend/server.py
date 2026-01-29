@@ -133,6 +133,64 @@ class RiskProfileUpdate(BaseModel):
 class FCMTokenUpdate(BaseModel):
     fcm_token: str
 
+# ==================== TEXT CLEANING UTILITY ====================
+
+def strip_markdown(text: str) -> str:
+    """
+    Comprehensively remove ALL markdown formatting from text.
+    Returns clean plain text.
+    """
+    if not text:
+        return ""
+    
+    import re
+    
+    # Remove bold/italic (**, *, ___, __, _)
+    text = re.sub(r'\*\*\*(.+?)\*\*\*', r'\1', text)  # ***text***
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)      # **text**
+    text = re.sub(r'\*(.+?)\*', r'\1', text)          # *text*
+    text = re.sub(r'___(.+?)___', r'\1', text)        # ___text___
+    text = re.sub(r'__(.+?)__', r'\1', text)          # __text__
+    text = re.sub(r'_(.+?)_', r'\1', text)            # _text_
+    
+    # Remove any remaining standalone asterisks
+    text = text.replace('***', '')
+    text = text.replace('**', '')
+    text = text.replace('*', '')
+    
+    # Remove headers (# ## ### etc.)
+    text = re.sub(r'^#{1,6}\s*', '', text, flags=re.MULTILINE)
+    
+    # Remove blockquotes (>)
+    text = re.sub(r'^>\s*', '', text, flags=re.MULTILINE)
+    
+    # Remove horizontal rules (---, ___, ***)
+    text = re.sub(r'^[-_*]{3,}\s*$', '', text, flags=re.MULTILINE)
+    
+    # Remove inline code (`code`)
+    text = re.sub(r'`(.+?)`', r'\1', text)
+    
+    # Remove code blocks (```code```)
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    
+    # Remove links [text](url) -> text
+    text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)
+    
+    # Remove images ![alt](url)
+    text = re.sub(r'!\[([^\]]*)\]\([^\)]+\)', r'\1', text)
+    
+    # Remove bullet points (-, *, +) at start of lines but keep the text
+    text = re.sub(r'^\s*[-*+]\s+', '  ', text, flags=re.MULTILINE)
+    
+    # Remove numbered lists (1. 2. etc.) but keep the text
+    text = re.sub(r'^\s*\d+\.\s+', '  ', text, flags=re.MULTILINE)
+    
+    # Clean up extra whitespace
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r' {2,}', ' ', text)
+    
+    return text.strip()
+
 # ==================== CRYPTO DATA SERVICE (CoinGecko) ====================
 
 class CryptoDataService:
