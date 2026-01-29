@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/context/AuthContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,7 +12,9 @@ export default function LandingPage() {
   const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
+    console.log('[INDEX] Auth state changed: isLoading=', isLoading, 'isAuthenticated=', isAuthenticated);
     if (!isLoading && isAuthenticated) {
+      console.log('[INDEX] User authenticated, redirecting to tabs...');
       router.replace('/(tabs)/news');
     }
   }, [isAuthenticated, isLoading]);
@@ -21,6 +23,15 @@ export default function LandingPage() {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  // If authenticated but not redirected yet, show loading
+  if (isAuthenticated) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Redirecting...</Text>
       </View>
     );
   }
