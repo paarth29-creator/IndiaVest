@@ -66,40 +66,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuth = async () => {
     try {
-      console.log('Checking auth...');
+      console.log('[AUTH] checkAuth: Starting auth check...');
       const token = await AsyncStorage.getItem('session_token');
-      console.log('Token from storage:', token ? 'found' : 'not found');
+      console.log('[AUTH] checkAuth: Token from storage:', token ? `found (${token.substring(0, 20)}...)` : 'not found');
       
       if (token) {
+        console.log('[AUTH] checkAuth: Verifying token with backend...');
         const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
         });
-        console.log('Auth response status:', response.status);
+        console.log('[AUTH] checkAuth: Response status:', response.status);
         
         if (response.ok) {
           const userData = await response.json();
-          console.log('User authenticated:', userData.name);
+          console.log('[AUTH] checkAuth: User authenticated:', userData.name);
           setUser(userData);
         } else {
-          console.log('Auth failed, clearing token');
+          console.log('[AUTH] checkAuth: Auth failed (status ' + response.status + '), clearing token');
           await AsyncStorage.removeItem('session_token');
+          setUser(null);
         }
       } else {
-        console.log('No token found');
+        console.log('[AUTH] checkAuth: No token found, user not authenticated');
+        setUser(null);
       }
     } catch (error) {
-      console.error('Auth check error:', error);
+      console.error('[AUTH] checkAuth: Error:', error);
+      setUser(null);
     } finally {
-      console.log('Auth check complete, setting isLoading to false');
+      console.log('[AUTH] checkAuth: Complete, setting isLoading to false');
       setIsLoading(false);
     }
   };
 
   const handleSessionId = async (sessionId: string) => {
     try {
+      console.log('[AUTH] handleSessionId: Exchanging session_id for token...');
       setIsLoading(true);
+      
       const response = await fetch(`${BACKEND_URL}/api/auth/session`, {
         method: 'POST',
         headers: {
@@ -108,14 +114,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ session_id: sessionId }),
       });
 
+      console.log('[AUTH] handleSessionId: Response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('[AUTH] handleSessionId: Got session_token, saving...');
+        console.log('[AUTH] handleSessionId: User data:', data.user?.name);
+        
         await AsyncStorage.setItem('session_token', data.session_token);
+        console.log('[AUTH] handleSessionId: Token saved to AsyncStorage');
+        
         setUser(data.user);
+        console.log('[AUTH] handleSessionId: User state updated');
+      } else {
+        const errorText = await response.text();
+        console.error('[AUTH] handleSessionId: Failed to exchange session_id:', errorText);
       }
     } catch (error) {
-      console.error('Session exchange error:', error);
+      console.error('[AUTH] handleSessionId: Error:', error);
     } finally {
+      console.log('[AUTH] handleSessionId: Complete, setting isLoading to false');
       setIsLoading(false);
     }
   };
