@@ -173,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
+      console.log('[AUTH] logout: Starting logout...');
       const token = await AsyncStorage.getItem('session_token');
       if (token) {
         await fetch(`${BACKEND_URL}/api/auth/logout`, {
@@ -184,12 +185,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       await AsyncStorage.removeItem('session_token');
       setUser(null);
+      console.log('[AUTH] logout: Complete');
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error('[AUTH] logout: Error:', error);
+    }
+  };
+
+  const devLogin = async (): Promise<boolean> => {
+    try {
+      console.log('[AUTH] devLogin: Starting dev login...');
+      setIsLoading(true);
+      
+      const response = await fetch(`${BACKEND_URL}/api/auth/dev-login`, {
+        method: 'POST',
+      });
+      
+      console.log('[AUTH] devLogin: Response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[AUTH] devLogin: Got user:', data.user?.name);
+        
+        await AsyncStorage.setItem('session_token', data.session_token);
+        setUser(data.user);
+        
+        console.log('[AUTH] devLogin: Complete, user set');
+        return true;
+      } else {
+        console.error('[AUTH] devLogin: Failed:', await response.text());
+        return false;
+      }
+    } catch (error) {
+      console.error('[AUTH] devLogin: Error:', error);
+      return false;
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const refreshUser = async () => {
+    console.log('[AUTH] refreshUser: Called');
     await checkAuth();
   };
 
@@ -202,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         refreshUser,
+        devLogin,
       }}
     >
       {children}
