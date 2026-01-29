@@ -1323,16 +1323,8 @@ async def get_stock_history(symbol: str, period: str = "1mo"):
 from leader_news_service import leader_news_service, clean_text
 
 def remove_markdown(text: str) -> str:
-    """Remove all markdown formatting from text"""
-    if not text:
-        return ""
-    import re
-    text = text.replace('**', '')
-    text = text.replace('*', '')
-    text = text.replace('`', '')
-    text = re.sub(r'^#+\s*', '', text, flags=re.MULTILINE)
-    text = re.sub(r'_+', ' ', text)
-    return text.strip()
+    """Wrapper for strip_markdown - ensures all AI text is clean"""
+    return strip_markdown(text)
 
 @api_router.get("/news")
 async def get_news(category: Optional[str] = None, search: Optional[str] = None, use_ai: bool = False):
