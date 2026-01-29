@@ -657,21 +657,21 @@ class TechnicalAnalysis:
         gains = np.where(deltas > 0, deltas, 0)
         losses = np.where(deltas < 0, -deltas, 0)
         
-        avg_gain = np.mean(gains[-period:])
-        avg_loss = np.mean(losses[-period:])
+        avg_gain = float(np.mean(gains[-period:]))
+        avg_loss = float(np.mean(losses[-period:]))
         
         if avg_loss == 0:
             return 100.0
         
         rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
-        return round(rsi, 2)
+        return float(round(rsi, 2))
     
     @staticmethod
     def calculate_macd(prices: List[float]) -> Dict:
         """Calculate MACD indicator"""
         if len(prices) < 26:
-            return {"macd": 0, "signal": 0, "histogram": 0, "trend": "neutral"}
+            return {"macd": 0.0, "signal": 0.0, "histogram": 0.0, "trend": "neutral"}
         
         prices_arr = np.array(prices)
         
@@ -681,39 +681,39 @@ class TechnicalAnalysis:
         
         macd_line = ema12 - ema26
         signal_line = TechnicalAnalysis._ema(macd_line, 9) if len(macd_line) >= 9 else macd_line
-        histogram = macd_line[-1] - signal_line[-1] if len(signal_line) > 0 else 0
+        histogram = float(macd_line[-1] - signal_line[-1]) if len(signal_line) > 0 else 0.0
         
         trend = "bullish" if histogram > 0 else "bearish" if histogram < 0 else "neutral"
         
         return {
-            "macd": round(macd_line[-1], 4),
-            "signal": round(signal_line[-1], 4),
-            "histogram": round(histogram, 4),
-            "trend": trend
+            "macd": float(round(float(macd_line[-1]), 4)),
+            "signal": float(round(float(signal_line[-1]), 4)),
+            "histogram": float(round(histogram, 4)),
+            "trend": str(trend)
         }
     
     @staticmethod
     def calculate_bollinger_bands(prices: List[float], period: int = 20, num_std: float = 2) -> Dict:
         """Calculate Bollinger Bands"""
         if len(prices) < period:
-            current = prices[-1] if prices else 0
+            current = float(prices[-1]) if prices else 0.0
             return {
-                "upper": current * 1.02,
-                "middle": current,
-                "lower": current * 0.98,
+                "upper": float(current * 1.02),
+                "middle": float(current),
+                "lower": float(current * 0.98),
                 "bandwidth": 4.0,
                 "position": "middle",
                 "squeeze": False
             }
         
         prices_arr = np.array(prices[-period:])
-        middle = np.mean(prices_arr)
-        std = np.std(prices_arr)
+        middle = float(np.mean(prices_arr))
+        std = float(np.std(prices_arr))
         upper = middle + (num_std * std)
         lower = middle - (num_std * std)
         
-        current_price = prices[-1]
-        bandwidth = ((upper - lower) / middle) * 100
+        current_price = float(prices[-1])
+        bandwidth = ((upper - lower) / middle) * 100 if middle > 0 else 0.0
         
         # Determine position
         if current_price >= upper:
@@ -726,14 +726,14 @@ class TechnicalAnalysis:
             position = "lower_half"
         
         # Detect squeeze (low bandwidth)
-        squeeze = bandwidth < 5.0
+        squeeze = bool(bandwidth < 5.0)
         
         return {
-            "upper": round(upper, 2),
-            "middle": round(middle, 2),
-            "lower": round(lower, 2),
-            "bandwidth": round(bandwidth, 2),
-            "position": position,
+            "upper": float(round(upper, 2)),
+            "middle": float(round(middle, 2)),
+            "lower": float(round(lower, 2)),
+            "bandwidth": float(round(bandwidth, 2)),
+            "position": str(position),
             "squeeze": squeeze
         }
     
