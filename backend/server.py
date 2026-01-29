@@ -139,10 +139,30 @@ class CryptoDataService:
     def __init__(self):
         self.base_url = "https://api.coingecko.com/api/v3"
         self.cache = {}
-        self.cache_ttl = 60  # seconds
+        self.cache_ttl = 30  # 30 seconds cache for fresher data
+        self.last_usd_inr_rate = 83.50  # Fallback USD/INR rate
+        
+    async def get_usd_inr_rate(self) -> float:
+        """Get current USD to INR exchange rate"""
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                # Try CoinGecko exchange rates
+                response = await client.get(f"{self.base_url}/exchange_rates")
+                if response.status_code == 200:
+                    data = response.json()
+                    rates = data.get("rates", {})
+                    if "inr" in rates:
+                        # BTC to INR rate / BTC to USD rate = USD to INR
+                        inr_rate = rates["inr"]["value"]
+                        usd_rate = rates["usd"]["value"]
+                        self.last_usd_inr_rate = inr_rate / usd_rate
+                        return self.last_usd_inr_rate
+        except Exception as e:
+            logger.warning(f"Failed to get USD/INR rate: {e}")
+        return self.last_usd_inr_rate
         
     async def get_prices(self) -> Dict:
-        """Get top 20 crypto prices from CoinGecko"""
+        """Get top 20 crypto prices from CoinGecko with accurate INR pricing"""
         cache_key = "crypto_prices"
         if cache_key in self.cache:
             cached_time, cached_data = self.cache[cache_key]
@@ -155,6 +175,7 @@ class CryptoDataService:
                 if COINGECKO_API_KEY:
                     headers["x-cg-demo-api-key"] = COINGECKO_API_KEY
                 
+                # Try INR first
                 response = await client.get(
                     f"{self.base_url}/coins/markets",
                     params={
@@ -171,6 +192,9 @@ class CryptoDataService:
                 if response.status_code == 200:
                     data = response.json()
                     result = {}
+                    now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+                    timestamp_ist = now_ist.strftime("%d %b %H:%M IST")
+                    
                     for coin in data:
                         symbol = coin["symbol"].upper()
                         result[symbol] = {
@@ -187,16 +211,74 @@ class CryptoDataService:
                             "ath": coin.get("ath", 0),
                             "atl": coin.get("atl", 0),
                             "circulating_supply": coin.get("circulating_supply", 0),
-                            "last_updated": coin.get("last_updated", datetime.now(timezone.utc).isoformat())
+                            "last_updated": timestamp_ist,
+                            "source": "CoinGecko"
                         }
                     self.cache[cache_key] = (datetime.now(), result)
                     return result
+                elif response.status_code == 429:
+                    # Rate limited - try USD and convert
+                    logger.warning("CoinGecko INR rate limited, trying USD conversion")
+                    return await self._get_prices_via_usd(client, headers)
                 else:
                     logger.warning(f"CoinGecko API returned {response.status_code}, using fallback")
                     return self._get_fallback_prices()
         except Exception as e:
             logger.error(f"CoinGecko API error: {e}")
             return self._get_fallback_prices()
+    
+    async def _get_prices_via_usd(self, client, headers) -> Dict:
+        """Fallback: Get USD prices and convert to INR"""
+        try:
+            usd_inr = await self.get_usd_inr_rate()
+            
+            response = await client.get(
+                f"{self.base_url}/coins/markets",
+                params={
+                    "vs_currency": "usd",
+                    "order": "market_cap_desc",
+                    "per_page": 20,
+                    "page": 1,
+                    "sparkline": False,
+                    "price_change_percentage": "24h,7d,30d"
+                },
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                result = {}
+                now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+                timestamp_ist = now_ist.strftime("%d %b %H:%M IST")
+                
+                for coin in data:
+                    symbol = coin["symbol"].upper()
+                    usd_price = coin["current_price"]
+                    inr_price = usd_price * usd_inr
+                    
+                    result[symbol] = {
+                        "id": coin["id"],
+                        "name": coin["name"],
+                        "price_inr": round(inr_price, 2),
+                        "price_usd": usd_price,
+                        "change_24h": coin.get("price_change_percentage_24h", 0) or 0,
+                        "change_7d": coin.get("price_change_percentage_7d_in_currency", 0) or 0,
+                        "change_30d": coin.get("price_change_percentage_30d_in_currency", 0) or 0,
+                        "volume_24h": (coin.get("total_volume", 0) or 0) * usd_inr,
+                        "market_cap": (coin.get("market_cap", 0) or 0) * usd_inr,
+                        "high_24h": (coin.get("high_24h", 0) or 0) * usd_inr,
+                        "low_24h": (coin.get("low_24h", 0) or 0) * usd_inr,
+                        "ath": (coin.get("ath", 0) or 0) * usd_inr,
+                        "atl": (coin.get("atl", 0) or 0) * usd_inr,
+                        "circulating_supply": coin.get("circulating_supply", 0),
+                        "last_updated": timestamp_ist,
+                        "source": f"CoinGecko (USD×{usd_inr:.2f})"
+                    }
+                self.cache["crypto_prices"] = (datetime.now(), result)
+                return result
+        except Exception as e:
+            logger.error(f"USD conversion fallback error: {e}")
+        return self._get_fallback_prices()
     
     async def get_coin_detail(self, coin_id: str) -> Dict:
         """Get detailed coin data including on-chain metrics"""
