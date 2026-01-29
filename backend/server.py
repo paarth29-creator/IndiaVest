@@ -387,11 +387,6 @@ class CryptoDataService:
             "UNI": {"id": "uniswap", "name": "Uniswap", "price_inr": 1420, "change_24h": 1.2, "volume_24h": 280000000 * USD_TO_INR, "market_cap": 8500000000 * USD_TO_INR, "high_24h": 1450, "low_24h": 1400, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
             "LTC": {"id": "litecoin", "name": "Litecoin", "price_inr": 11500, "change_24h": 0.5, "volume_24h": 450000000 * USD_TO_INR, "market_cap": 8600000000 * USD_TO_INR, "high_24h": 11700, "low_24h": 11300, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
         }
-            "ARB": {"id": "arbitrum", "name": "Arbitrum", "price_inr": 145, "change_24h": 1.8, "volume_24h": 380000000 * USD_TO_INR, "market_cap": 580000000000, "high_24h": 150, "low_24h": 142},
-            "OP": {"id": "optimism", "name": "Optimism", "price_inr": 285, "change_24h": 2.2, "volume_24h": 250000000 * USD_TO_INR, "market_cap": 320000000000, "high_24h": 295, "low_24h": 278},
-            "INJ": {"id": "injective-protocol", "name": "Injective", "price_inr": 3500, "change_24h": 4.5, "volume_24h": 180000000 * USD_TO_INR, "market_cap": 320000000000, "high_24h": 3600, "low_24h": 3400},
-            "RENDER": {"id": "render-token", "name": "Render", "price_inr": 1250, "change_24h": 5.2, "volume_24h": 220000000 * USD_TO_INR, "market_cap": 480000000000, "high_24h": 1300, "low_24h": 1200}
-        }
 
 crypto_service = CryptoDataService()
 
