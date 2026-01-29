@@ -366,10 +366,24 @@ class CryptoDataService:
         return []
     
     def _get_fallback_prices(self) -> Dict:
-        """Fallback mock data when API fails"""
+        """Fallback data when API fails - uses realistic current prices"""
+        # Updated fallback prices as of late Jan 2026 (approximate)
+        # BTC ~$92,000 USD = ~₹77 lakh INR
+        now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+        timestamp_ist = now_ist.strftime("%d %b %H:%M IST")
+        
         return {
-            "BTC": {"id": "bitcoin", "name": "Bitcoin", "price_inr": 7245000, "change_24h": 2.3, "volume_24h": 45000000000 * USD_TO_INR, "market_cap": 141000000000000, "high_24h": 7300000, "low_24h": 7150000},
-            "ETH": {"id": "ethereum", "name": "Ethereum", "price_inr": 325000, "change_24h": 1.8, "volume_24h": 18000000000 * USD_TO_INR, "market_cap": 39000000000000, "high_24h": 330000, "low_24h": 320000},
+            "BTC": {"id": "bitcoin", "name": "Bitcoin", "price_inr": 7700000, "change_24h": 1.5, "volume_24h": 45000000000 * USD_TO_INR, "market_cap": 1800000000000 * USD_TO_INR, "high_24h": 7750000, "low_24h": 7620000, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
+            "ETH": {"id": "ethereum", "name": "Ethereum", "price_inr": 275000, "change_24h": 2.1, "volume_24h": 18000000000 * USD_TO_INR, "market_cap": 330000000000 * USD_TO_INR, "high_24h": 280000, "low_24h": 270000, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
+            "BNB": {"id": "binancecoin", "name": "BNB", "price_inr": 52000, "change_24h": -0.5, "volume_24h": 1200000000 * USD_TO_INR, "market_cap": 80000000000 * USD_TO_INR, "high_24h": 53000, "low_24h": 51500, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
+            "SOL": {"id": "solana", "name": "Solana", "price_inr": 21000, "change_24h": 3.2, "volume_24h": 3500000000 * USD_TO_INR, "market_cap": 100000000000 * USD_TO_INR, "high_24h": 21500, "low_24h": 20200, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
+            "XRP": {"id": "ripple", "name": "XRP", "price_inr": 250, "change_24h": 1.8, "volume_24h": 2800000000 * USD_TO_INR, "market_cap": 140000000000 * USD_TO_INR, "high_24h": 255, "low_24h": 245, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
+            "ADA": {"id": "cardano", "name": "Cardano", "price_inr": 85, "change_24h": 2.5, "volume_24h": 800000000 * USD_TO_INR, "market_cap": 30000000000 * USD_TO_INR, "high_24h": 88, "low_24h": 82, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
+            "DOGE": {"id": "dogecoin", "name": "Dogecoin", "price_inr": 30, "change_24h": 4.2, "volume_24h": 1500000000 * USD_TO_INR, "market_cap": 45000000000 * USD_TO_INR, "high_24h": 31, "low_24h": 28.5, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
+            "AVAX": {"id": "avalanche-2", "name": "Avalanche", "price_inr": 3200, "change_24h": 1.9, "volume_24h": 450000000 * USD_TO_INR, "market_cap": 13000000000 * USD_TO_INR, "high_24h": 3300, "low_24h": 3100, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
+            "DOT": {"id": "polkadot", "name": "Polkadot", "price_inr": 600, "change_24h": 2.8, "volume_24h": 350000000 * USD_TO_INR, "market_cap": 8500000000 * USD_TO_INR, "high_24h": 615, "low_24h": 580, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
+            "MATIC": {"id": "matic-network", "name": "Polygon", "price_inr": 42, "change_24h": 3.1, "volume_24h": 280000000 * USD_TO_INR, "market_cap": 4200000000 * USD_TO_INR, "high_24h": 44, "low_24h": 40, "last_updated": timestamp_ist, "source": "Fallback (estimated)"},
+        }
             "BNB": {"id": "binancecoin", "name": "BNB", "price_inr": 52000, "change_24h": -0.5, "volume_24h": 1200000000 * USD_TO_INR, "market_cap": 8000000000000, "high_24h": 53000, "low_24h": 51000},
             "SOL": {"id": "solana", "name": "Solana", "price_inr": 15500, "change_24h": 4.2, "volume_24h": 3500000000 * USD_TO_INR, "market_cap": 7200000000000, "high_24h": 16000, "low_24h": 15000},
             "XRP": {"id": "ripple", "name": "XRP", "price_inr": 185, "change_24h": -1.2, "volume_24h": 2800000000 * USD_TO_INR, "market_cap": 9500000000000, "high_24h": 190, "low_24h": 180},
