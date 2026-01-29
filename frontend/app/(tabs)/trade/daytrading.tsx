@@ -62,16 +62,23 @@ interface DayTradingData {
 interface PersonalizedData {
   summary: {
     capital_input: number;
-    total_suggested_investment: number;
-    capital_at_risk_pct: number;
+    total_deployed: number;
+    deployment_pct: number;
+    positions_count: number;
     expected_yield_range: {
       best_case_inr: number;
+      best_case_pct: number;
       expected_inr: number;
+      expected_pct: number;
       worst_case_inr: number;
+      worst_case_pct: number;
       probability_profit_overall: number;
     };
-    recommendations_count: number;
-    uninvested_capital: number;
+    allocation_breakdown: Array<{
+      symbol: string;
+      amount: number;
+      pct: number;
+    }>;
   };
   recommendations: Recommendation[];
   overall_reasoning: string;
