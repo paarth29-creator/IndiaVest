@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../src/context/AuthContext';
@@ -7,11 +7,39 @@ import { Ionicons } from '@expo/vector-icons';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, isAuthenticated, devLogin } = useAuth();
   const [showDisclaimer, setShowDisclaimer] = useState(true);
+  const [devLoginLoading, setDevLoginLoading] = useState(false);
+
+  // Redirect to tabs if already authenticated
+  useEffect(() => {
+    console.log('[LOGIN] isAuthenticated changed:', isAuthenticated);
+    if (isAuthenticated) {
+      console.log('[LOGIN] User is authenticated, redirecting to tabs...');
+      router.replace('/(tabs)/news');
+    }
+  }, [isAuthenticated]);
 
   const handleLogin = async () => {
+    console.log('[LOGIN] handleLogin: Starting Google login...');
     await login();
+  };
+
+  const handleDevLogin = async () => {
+    console.log('[LOGIN] handleDevLogin: Starting dev login...');
+    setDevLoginLoading(true);
+    try {
+      const success = await devLogin();
+      console.log('[LOGIN] handleDevLogin: Result:', success);
+      if (success) {
+        console.log('[LOGIN] handleDevLogin: Success, navigating to tabs...');
+        router.replace('/(tabs)/news');
+      }
+    } catch (error) {
+      console.error('[LOGIN] handleDevLogin: Error:', error);
+    } finally {
+      setDevLoginLoading(false);
+    }
   };
 
   return (
@@ -82,6 +110,26 @@ export default function LoginScreen() {
               </>
             )}
           </TouchableOpacity>
+
+          {/* Dev Login Button - FOR DEVELOPMENT/TESTING */}
+          <TouchableOpacity
+            style={styles.devButton}
+            onPress={handleDevLogin}
+            disabled={devLoginLoading}
+          >
+            {devLoginLoading ? (
+              <ActivityIndicator color="#10b981" size="small" />
+            ) : (
+              <>
+                <Ionicons name="code-slash" size={20} color="#10b981" style={styles.devIcon} />
+                <Text style={styles.devButtonText}>Dev Login (Skip Auth)</Text>
+              </>
+            )}
+          </TouchableOpacity>
+          
+          <Text style={styles.devNote}>
+            Use Dev Login to bypass Google OAuth for testing purposes
+          </Text>
 
           <Text style={styles.termsText}>
             By continuing, you agree to our Terms of Service and Privacy Policy
@@ -166,6 +214,32 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  devButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderRadius: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#10b981',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  },
+  devIcon: {
+    marginRight: 8,
+  },
+  devButtonText: {
+    color: '#10b981',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  devNote: {
+    textAlign: 'center',
+    fontSize: 11,
+    color: '#6b7280',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   termsText: {
     textAlign: 'center',
