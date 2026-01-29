@@ -1632,12 +1632,11 @@ async def get_news_categories():
 async def get_daily_decision(use_ai: bool = True, risk_profile: str = "medium"):
     """Get today's investment decision with real-time data from yfinance + CoinGecko"""
     
-    try:
-        # Fetch real crypto data from CoinGecko
-        crypto_prices = await crypto_service.get_prices()
-        btc_data = crypto_prices.get("BTC", {})
-        eth_data = crypto_prices.get("ETH", {})
-        sol_data = crypto_prices.get("SOL", {})
+    # Fetch real crypto data from CoinGecko
+    crypto_prices = await crypto_service.get_prices()
+    btc_data = crypto_prices.get("BTC", {})
+    eth_data = crypto_prices.get("ETH", {})
+    sol_data = crypto_prices.get("SOL", {})
         
         # Fetch real stock data from yfinance
         stock_prices = await stock_service.get_nifty50()
