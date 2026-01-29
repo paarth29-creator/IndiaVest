@@ -1981,6 +1981,203 @@ If market conditions are unfavorable, consider:
         "disclaimer": DISCLAIMER
     }
 
+@api_router.post("/daytrading/personalized")
+async def get_personalized_day_trading(request: Request):
+    """Personalized Day Trading recommendations based on capital input"""
+    body = await request.json()
+    capital = body.get("capital", 0)  # INR amount user wants to invest
+    risk_profile = body.get("risk_profile", "medium")
+    
+    if capital <= 0:
+        return {"error": "Please enter a valid capital amount > 0"}
+    
+    crypto_prices = await crypto_service.get_prices()
+    
+    # Analyze market conditions
+    total_volume = sum(c.get("volume_24h", 0) for c in crypto_prices.values())
+    avg_volatility = float(np.mean([abs(c.get("change_24h", 0)) for c in crypto_prices.values()]))
+    
+    # Get top liquid coins
+    liquid_coins = []
+    for symbol, data in crypto_prices.items():
+        volume_usd = data.get("volume_24h", 0) / USD_TO_INR
+        if volume_usd > 500000000:
+            liquid_coins.append({
+                "symbol": symbol,
+                "name": data.get("name", symbol),
+                "price_inr": float(data.get("price_inr", 0)),
+                "change_24h": float(data.get("change_24h", 0)),
+                "volume_24h": float(data.get("volume_24h", 0)),
+                "volume_usd": float(volume_usd)
+            })
+    
+    risk_mult = RISK_MULTIPLIERS.get(risk_profile, RISK_MULTIPLIERS["medium"])
+    
+    # Max capital per trade = 3% of total, max total exposure = 20%
+    max_per_trade = min(capital * 0.03, capital * 0.20 / 5)  # Max 5 positions
+    max_total_exposure = capital * 0.20
+    
+    # Sort by combined score (volatility * volume)
+    top_coins = sorted(liquid_coins, key=lambda x: abs(x["change_24h"]) * x["volume_usd"], reverse=True)[:5]
+    
+    recommendations = []
+    total_allocated = 0
+    
+    for i, coin in enumerate(top_coins):
+        if total_allocated >= max_total_exposure:
+            break
+            
+        price = float(coin["price_inr"])
+        volatility = float(abs(coin["change_24h"]))
+        
+        # Position size based on volatility (lower volatility = larger position ok)
+        position_pct = 0.03 if volatility < 3 else 0.02 if volatility < 5 else 0.01
+        position_value = min(capital * position_pct, max_per_trade)
+        position_value = min(position_value, max_total_exposure - total_allocated)
+        
+        if position_value < 100:  # Skip if too small
+            continue
+            
+        quantity = position_value / price
+        
+        # Entry range (±0.5% to ±1%)
+        entry_low = price * 0.995
+        entry_high = price * 1.005
+        
+        # Stop loss (1-2% based on risk)
+        sl_pct = 0.015 * risk_mult["stop_loss"]
+        stop_loss = price * (1 - sl_pct)
+        
+        # Take profit levels
+        tp1 = price * (1 + sl_pct)  # 1:1 RR
+        tp2 = price * (1 + sl_pct * 2)  # 1:2 RR
+        tp3 = price * (1 + sl_pct * 3)  # 1:3 RR
+        
+        # Expected profit range
+        loss_scenario = position_value * sl_pct
+        profit_1to1 = position_value * sl_pct
+        profit_1to2 = position_value * sl_pct * 2
+        
+        # Probabilistic estimate
+        win_probability = 45 if volatility > 4 else 55 if volatility > 2 else 60
+        
+        recommendations.append({
+            "rank": i + 1,
+            "symbol": coin["symbol"],
+            "name": coin["name"],
+            "current_price_inr": round(price, 2),
+            "change_24h": round(coin["change_24h"], 2),
+            "entry_range": {"low": round(entry_low, 2), "high": round(entry_high, 2)},
+            "suggested_quantity": round(quantity, 6),
+            "suggested_investment_inr": round(position_value, 0),
+            "stop_loss": round(stop_loss, 2),
+            "stop_loss_pct": round(sl_pct * 100, 1),
+            "take_profit": {
+                "tp1_1to1": round(tp1, 2),
+                "tp2_1to2": round(tp2, 2),
+                "tp3_1to3": round(tp3, 2)
+            },
+            "sell_guidance": {
+                "target_time": "Within 2-4 hours" if volatility > 3 else "By IST 3:30 PM",
+                "exit_strategy": "Trail stop-loss after TP1 hit. Book 50% at TP1, 30% at TP2, let 20% ride to TP3."
+            },
+            "expected_profit_loss": {
+                "best_case_inr": round(profit_1to2, 0),
+                "expected_inr": round(profit_1to1 * win_probability/100 - loss_scenario * (100-win_probability)/100, 0),
+                "worst_case_inr": round(-loss_scenario, 0),
+                "probability_profit": win_probability,
+                "probability_loss": 100 - win_probability
+            },
+            "reasoning": strip_markdown(f"""ANALYSIS: {coin['name']} ({coin['symbol']})
+
+SIGNAL STRENGTH: {'STRONG' if volatility > 3 else 'MODERATE' if volatility > 1.5 else 'WEAK'}
+
+WHY THIS COIN:
+Volume of ${coin['volume_usd']/1e9:.1f}B ensures liquidity for quick entry/exit.
+{volatility:.1f}% 24h movement indicates active trading interest.
+
+ENTRY STRATEGY:
+Place limit buy at Rs {entry_low:,.0f} to Rs {entry_high:,.0f}.
+Do NOT chase if price moves above entry range.
+
+EXIT STRATEGY:
+Stop-loss at Rs {stop_loss:,.0f} (hard stop, no exceptions).
+TP1: Rs {tp1:,.0f} - Book 50% profits.
+TP2: Rs {tp2:,.0f} - Book 30% profits.
+TP3: Rs {tp3:,.0f} - Let final 20% ride.
+
+COUNTERPOINT:
+Day trading is a negative-sum game after fees and taxes. 30% VDA tax means you need 43% gains to net 30%. The Rs {position_value:,.0f} position could become Rs {position_value - loss_scenario:,.0f} within hours.
+
+ALTERNATIVE:
+If uncertain, skip this trade entirely. Missing a trade costs nothing. Losing money costs everything.
+
+{DISCLAIMER}""")
+        })
+        
+        total_allocated += position_value
+    
+    # Calculate overall expected outcome
+    if recommendations:
+        total_position = sum(r["suggested_investment_inr"] for r in recommendations)
+        avg_win_prob = np.mean([r["expected_profit_loss"]["probability_profit"] for r in recommendations])
+        expected_total_profit = sum(r["expected_profit_loss"]["expected_inr"] for r in recommendations)
+        best_case = sum(r["expected_profit_loss"]["best_case_inr"] for r in recommendations)
+        worst_case = sum(r["expected_profit_loss"]["worst_case_inr"] for r in recommendations)
+    else:
+        total_position = 0
+        avg_win_prob = 0
+        expected_total_profit = 0
+        best_case = 0
+        worst_case = 0
+    
+    summary = {
+        "capital_input": capital,
+        "total_suggested_investment": round(total_position, 0),
+        "capital_at_risk_pct": round(total_position / capital * 100, 1) if capital > 0 else 0,
+        "expected_yield_range": {
+            "best_case_inr": round(best_case, 0),
+            "expected_inr": round(expected_total_profit, 0),
+            "worst_case_inr": round(worst_case, 0),
+            "probability_profit_overall": round(avg_win_prob, 0)
+        },
+        "recommendations_count": len(recommendations),
+        "uninvested_capital": round(capital - total_position, 0)
+    }
+    
+    return {
+        "summary": summary,
+        "recommendations": recommendations,
+        "market_conditions": {
+            "total_volume_usd": float(total_volume / USD_TO_INR),
+            "avg_volatility": round(avg_volatility, 2),
+            "liquid_coins_count": len(liquid_coins)
+        },
+        "overall_reasoning": strip_markdown(f"""PERSONALIZED DAY TRADING PLAN FOR Rs {capital:,.0f}
+
+CAPITAL ALLOCATION:
+Total capital: Rs {capital:,.0f}
+Suggested for day trading: Rs {total_position:,.0f} ({total_position/capital*100:.1f}%)
+Reserve (uninvested): Rs {capital - total_position:,.0f}
+
+EXPECTED OUTCOME (by EOD):
+Best case: +Rs {best_case:,.0f} ({avg_win_prob:.0f}% probability of profit)
+Expected: +Rs {expected_total_profit:,.0f} (risk-weighted average)
+Worst case: Rs {worst_case:,.0f} (stop-loss scenario)
+
+COUNTERPOINT TO OPTIMISM:
+These are PROBABILISTIC estimates, not guarantees. Crypto can gap through stop-losses. Black swan events can cause 20%+ drops in minutes. The 30% VDA tax means even profitable trades have reduced net returns.
+
+ALTERNATIVE STRATEGY:
+If you are not experienced in day trading, consider:
+1. Paper trading for 30 days first
+2. Swing trading (3-7 day holds) for better risk/reward
+3. DCA into BTC/ETH for long-term wealth building
+
+{DISCLAIMER}"""),
+        "disclaimer": DISCLAIMER
+    }
+
 # ==================== HIGH RISK / HIGH REWARD ====================
 
 @api_router.get("/highrisk/{horizon}")
