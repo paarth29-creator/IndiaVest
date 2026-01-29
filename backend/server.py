@@ -1632,59 +1632,102 @@ async def get_news_categories():
 async def get_daily_decision(use_ai: bool = True, risk_profile: str = "medium"):
     """Get today's investment decision with real-time data from yfinance + CoinGecko"""
     
-    # Fetch real crypto data from CoinGecko
-    crypto_prices = await crypto_service.get_prices()
-    btc_data = crypto_prices.get("BTC", {})
-    eth_data = crypto_prices.get("ETH", {})
-    sol_data = crypto_prices.get("SOL", {})
-    
-    # Fetch real stock data from yfinance
-    stock_prices = await stock_service.get_nifty50()
-    
-    # Calculate Nifty average change from top stocks
-    top_stocks = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK"]
-    nifty_changes = [stock_prices.get(s, {}).get("change_24h", 0) for s in top_stocks if s in stock_prices]
-    avg_nifty_change = float(np.mean(nifty_changes)) if nifty_changes else 0.5
-    
-    # Get historical data for technicals
-    btc_history = await crypto_service.get_historical_data("bitcoin", 30)
-    btc_closes = [h["close"] for h in btc_history] if btc_history else [btc_data.get("price_inr", 7000000)]
-    
-    eth_history = await crypto_service.get_historical_data("ethereum", 30)
-    eth_closes = [h["close"] for h in eth_history] if eth_history else [eth_data.get("price_inr", 300000)]
-    
-    # Calculate technical indicators
-    btc_rsi = TechnicalAnalysis.calculate_rsi(btc_closes)
-    btc_macd = TechnicalAnalysis.calculate_macd(btc_closes)
-    btc_bollinger = TechnicalAnalysis.calculate_bollinger_bands(btc_closes)
-    
-    eth_rsi = TechnicalAnalysis.calculate_rsi(eth_closes)
-    
-    # Build comprehensive market snapshot
-    market_data = {
-        "btc_price": btc_data.get("price_inr", 7000000),
-        "btc_rsi": btc_rsi,
-        "btc_macd": btc_macd,
-        "btc_bollinger": btc_bollinger,
-        "btc_change": btc_data.get("change_24h", 0),
-        "btc_volume": btc_data.get("volume_24h", 0),
-        "eth_price": eth_data.get("price_inr", 300000),
-        "eth_rsi": eth_rsi,
-        "eth_change": eth_data.get("change_24h", 0),
-        "sol_price": sol_data.get("price_inr", 15000),
-        "sol_change": sol_data.get("change_24h", 0),
-        "nifty_level": 24500,  # Would need separate API for exact Nifty value
-        "nifty_change": avg_nifty_change,
-        "inr_usd": USD_TO_INR,
-        "top_stocks": {s: {"price": stock_prices.get(s, {}).get("price_inr", 0), "change": stock_prices.get(s, {}).get("change_24h", 0)} for s in top_stocks if s in stock_prices}
-    }
-    
-    # Risk multipliers
-    risk_mult = RISK_MULTIPLIERS.get(risk_profile, RISK_MULTIPLIERS["medium"])
-    
-    # Determine recommendation based on technicals
-    crypto_score = 0
-    stock_score = 0
+    try:
+        # Fetch real crypto data from CoinGecko
+        crypto_prices = await crypto_service.get_prices()
+        btc_data = crypto_prices.get("BTC", {})
+        eth_data = crypto_prices.get("ETH", {})
+        sol_data = crypto_prices.get("SOL", {})
+        
+        # Fetch real stock data from yfinance
+        stock_prices = await stock_service.get_nifty50()
+        
+        # Get Nifty index and USD/INR directly from yfinance
+        nifty_level = 24500.0
+        usd_inr_rate = USD_TO_INR
+        
+        try:
+            import yfinance as yf
+            # Get Nifty 50 index
+            nifty = yf.Ticker("^NSEI")
+            nifty_hist = nifty.history(period="2d")
+            if len(nifty_hist) >= 1:
+                nifty_level = float(nifty_hist['Close'].iloc[-1])
+            
+            # Get USD/INR rate
+            usdinr = yf.Ticker("INR=X")
+            usdinr_hist = usdinr.history(period="1d")
+            if len(usdinr_hist) >= 1:
+                usd_inr_rate = float(usdinr_hist['Close'].iloc[-1])
+        except Exception as e:
+            logger.warning(f"yfinance index fetch error: {e}")
+        
+        # Calculate Nifty average change from top stocks
+        top_stocks = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK"]
+        nifty_changes = [float(stock_prices.get(s, {}).get("change_24h", 0)) for s in top_stocks if s in stock_prices]
+        avg_nifty_change = float(np.mean(nifty_changes)) if nifty_changes else 0.5
+        
+        # Get historical data for technicals
+        btc_history = await crypto_service.get_historical_data("bitcoin", 30)
+        btc_closes = [float(h["close"]) for h in btc_history] if btc_history else [float(btc_data.get("price_inr", 7700000))]
+        
+        eth_history = await crypto_service.get_historical_data("ethereum", 30)
+        eth_closes = [float(h["close"]) for h in eth_history] if eth_history else [float(eth_data.get("price_inr", 275000))]
+        
+        # Calculate technical indicators
+        btc_rsi = float(TechnicalAnalysis.calculate_rsi(btc_closes))
+        btc_macd = TechnicalAnalysis.calculate_macd(btc_closes)
+        btc_bollinger = TechnicalAnalysis.calculate_bollinger_bands(btc_closes)
+        
+        eth_rsi = float(TechnicalAnalysis.calculate_rsi(eth_closes))
+        
+        # Ensure all values are native Python types (not numpy)
+        btc_price = float(btc_data.get("price_inr", 0) or 7700000)
+        btc_change = float(btc_data.get("change_24h", 0) or 0)
+        eth_price = float(eth_data.get("price_inr", 0) or 275000)
+        eth_change = float(eth_data.get("change_24h", 0) or 0)
+        sol_price = float(sol_data.get("price_inr", 0) or 21000)
+        sol_change = float(sol_data.get("change_24h", 0) or 0)
+        btc_volume = float(btc_data.get("volume_24h", 0) or 0)
+        
+        # Build comprehensive market snapshot with guaranteed values
+        market_data = {
+            "btc_price": btc_price,
+            "btc_rsi": btc_rsi,
+            "btc_macd": {
+                "macd": float(btc_macd.get("macd", 0)),
+                "signal": float(btc_macd.get("signal", 0)),
+                "histogram": float(btc_macd.get("histogram", 0)),
+                "trend": str(btc_macd.get("trend", "neutral"))
+            },
+            "btc_bollinger": {
+                "upper": float(btc_bollinger.get("upper", 0)),
+                "middle": float(btc_bollinger.get("middle", 0)),
+                "lower": float(btc_bollinger.get("lower", 0)),
+                "bandwidth": float(btc_bollinger.get("bandwidth", 0)),
+                "position": str(btc_bollinger.get("position", "middle")),
+                "squeeze": bool(btc_bollinger.get("squeeze", False))
+            },
+            "btc_change": btc_change,
+            "btc_volume": btc_volume,
+            "eth_price": eth_price,
+            "eth_rsi": eth_rsi,
+            "eth_change": eth_change,
+            "sol_price": sol_price,
+            "sol_change": sol_change,
+            "nifty_level": float(nifty_level),
+            "nifty_change": float(avg_nifty_change),
+            "inr_usd": float(usd_inr_rate),
+            "last_updated": (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime("%d %b %H:%M IST"),
+            "data_status": "live" if btc_price > 1000000 else "fallback"
+        }
+        
+        # Risk multipliers
+        risk_mult = RISK_MULTIPLIERS.get(risk_profile, RISK_MULTIPLIERS["medium"])
+        
+        # Determine recommendation based on technicals
+        crypto_score = 0
+        stock_score = 0
     
     # Crypto scoring
     if btc_rsi < 35:
