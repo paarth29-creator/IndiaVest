@@ -745,6 +745,45 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  allocationSection: {
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  allocationTitle: {
+    color: '#9ca3af',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  allocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  allocationCoin: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    width: 50,
+  },
+  allocationBarContainer: {
+    flex: 1,
+    height: 8,
+    backgroundColor: '#2d2d44',
+    borderRadius: 4,
+    marginHorizontal: 8,
+    overflow: 'hidden',
+  },
+  allocationBar: {
+    height: '100%',
+    backgroundColor: '#f59e0b',
+    borderRadius: 4,
+  },
+  allocationAmount: {
+    color: '#9ca3af',
+    fontSize: 11,
+    width: 100,
+    textAlign: 'right',
+  },
   personalizedCard: {
     backgroundColor: '#1a1a2e',
     borderRadius: 12,
