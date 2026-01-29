@@ -1729,45 +1729,45 @@ async def get_daily_decision(use_ai: bool = True, risk_profile: str = "medium"):
         crypto_score = 0
         stock_score = 0
     
-    # Crypto scoring
-    if btc_rsi < 35:
-        crypto_score += 30  # Oversold - bullish
-    elif btc_rsi > 70:
-        crypto_score -= 20  # Overbought - bearish
-    else:
-        crypto_score += 10  # Neutral
-    
-    if btc_macd["trend"] == "bullish":
-        crypto_score += 20
-    elif btc_macd["trend"] == "bearish":
-        crypto_score -= 15
-    
-    if btc_data.get("change_24h", 0) > 3:
-        crypto_score += 15
-    elif btc_data.get("change_24h", 0) < -3:
-        crypto_score -= 10
-    
-    # Stock scoring
-    if avg_nifty_change > 1:
-        stock_score += 25
-    elif avg_nifty_change < -1:
-        stock_score -= 15
-    else:
-        stock_score += 10
-    
-    # Determine recommendation
-    if crypto_score > 40 and crypto_score > stock_score:
-        recommendation = "Crypto"
-        confidence = min(85, 50 + crypto_score)
-    elif stock_score > 30 and stock_score > crypto_score:
-        recommendation = "Stocks"
-        confidence = min(80, 50 + stock_score)
-    elif crypto_score > 20 and stock_score > 20:
-        recommendation = "Both"
-        confidence = min(75, 45 + (crypto_score + stock_score) // 2)
-    else:
-        recommendation = "Hold"
-        confidence = 60
+        # Crypto scoring
+        if btc_rsi < 35:
+            crypto_score += 30  # Oversold - bullish
+        elif btc_rsi > 70:
+            crypto_score -= 20  # Overbought - bearish
+        else:
+            crypto_score += 10  # Neutral
+        
+        if btc_macd["trend"] == "bullish":
+            crypto_score += 20
+        elif btc_macd["trend"] == "bearish":
+            crypto_score -= 15
+        
+        if btc_change > 3:
+            crypto_score += 15
+        elif btc_change < -3:
+            crypto_score -= 10
+        
+        # Stock scoring
+        if avg_nifty_change > 1:
+            stock_score += 25
+        elif avg_nifty_change < -1:
+            stock_score -= 15
+        else:
+            stock_score += 10
+        
+        # Determine recommendation
+        if crypto_score > 40 and crypto_score > stock_score:
+            recommendation = "Crypto"
+            confidence = min(85, 50 + crypto_score)
+        elif stock_score > 30 and stock_score > crypto_score:
+            recommendation = "Stocks"
+            confidence = min(80, 50 + stock_score)
+        elif crypto_score > 20 and stock_score > 20:
+            recommendation = "Both"
+            confidence = min(75, 45 + (crypto_score + stock_score) // 2)
+        else:
+            recommendation = "Hold"
+            confidence = 60
     
     # Generate reasoning
     reasoning = remove_markdown(f"""TODAYS INVESTMENT RECOMMENDATION: {recommendation}
