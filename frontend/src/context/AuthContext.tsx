@@ -22,6 +22,7 @@ interface AuthContextType {
   login: () => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  devLogin: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,19 +32,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    checkAuth();
-    
-    // Handle deep links on web
+    // First check for session_id in URL (OAuth callback)
     if (Platform.OS === 'web') {
       const hash = window.location.hash;
+      const search = window.location.search;
+      let sessionId = null;
+      
+      console.log('[AUTH] Checking URL for session_id...');
+      console.log('[AUTH] Hash:', hash);
+      console.log('[AUTH] Search:', search);
+      
       if (hash.includes('session_id=')) {
-        const sessionId = hash.split('session_id=')[1]?.split('&')[0];
-        if (sessionId) {
-          handleSessionId(sessionId);
+        sessionId = hash.split('session_id=')[1]?.split('&')[0];
+        console.log('[AUTH] Found session_id in hash:', sessionId);
+      } else if (search.includes('session_id=')) {
+        sessionId = search.split('session_id=')[1]?.split('&')[0];
+        console.log('[AUTH] Found session_id in search:', sessionId);
+      }
+      
+      if (sessionId) {
+        console.log('[AUTH] Processing session_id from OAuth callback...');
+        handleSessionId(sessionId).then(() => {
+          // Clear the URL after processing
           window.history.replaceState(null, '', window.location.pathname);
-        }
+        });
+        return; // Don't call checkAuth, handleSessionId will set the user
       }
     }
+    
+    // No OAuth callback, check existing auth
+    checkAuth();
   }, []);
 
   const checkAuth = async () => {
