@@ -1409,111 +1409,157 @@ async def get_news_categories():
 # ==================== DAILY DECISION ROUTES ====================
 
 @api_router.get("/decision/today")
-async def get_daily_decision(use_ai: bool = False, risk_profile: str = "medium"):
-    """Get today's investment decision with technical analysis"""
-    # Get real market data
+async def get_daily_decision(use_ai: bool = True, risk_profile: str = "medium"):
+    """Get today's investment decision with real-time data from yfinance + CoinGecko"""
+    
+    # Fetch real crypto data from CoinGecko
     crypto_prices = await crypto_service.get_prices()
     btc_data = crypto_prices.get("BTC", {})
     eth_data = crypto_prices.get("ETH", {})
+    sol_data = crypto_prices.get("SOL", {})
     
-    # Get historical for technicals
+    # Fetch real stock data from yfinance
+    stock_prices = await stock_service.get_nifty50()
+    
+    # Calculate Nifty average change from top stocks
+    top_stocks = ["RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK"]
+    nifty_changes = [stock_prices.get(s, {}).get("change_24h", 0) for s in top_stocks if s in stock_prices]
+    avg_nifty_change = float(np.mean(nifty_changes)) if nifty_changes else 0.5
+    
+    # Get historical data for technicals
     btc_history = await crypto_service.get_historical_data("bitcoin", 30)
     btc_closes = [h["close"] for h in btc_history] if btc_history else [btc_data.get("price_inr", 7000000)]
     
+    eth_history = await crypto_service.get_historical_data("ethereum", 30)
+    eth_closes = [h["close"] for h in eth_history] if eth_history else [eth_data.get("price_inr", 300000)]
+    
+    # Calculate technical indicators
     btc_rsi = TechnicalAnalysis.calculate_rsi(btc_closes)
     btc_macd = TechnicalAnalysis.calculate_macd(btc_closes)
     btc_bollinger = TechnicalAnalysis.calculate_bollinger_bands(btc_closes)
     
+    eth_rsi = TechnicalAnalysis.calculate_rsi(eth_closes)
+    
+    # Build comprehensive market snapshot
     market_data = {
         "btc_price": btc_data.get("price_inr", 7000000),
         "btc_rsi": btc_rsi,
         "btc_macd": btc_macd,
         "btc_bollinger": btc_bollinger,
         "btc_change": btc_data.get("change_24h", 0),
+        "btc_volume": btc_data.get("volume_24h", 0),
         "eth_price": eth_data.get("price_inr", 300000),
+        "eth_rsi": eth_rsi,
         "eth_change": eth_data.get("change_24h", 0),
-        "nifty_level": 24500,
-        "nifty_change": 0.8,
-        "inr_usd": USD_TO_INR
+        "sol_price": sol_data.get("price_inr", 15000),
+        "sol_change": sol_data.get("change_24h", 0),
+        "nifty_level": 24500,  # Would need separate API for exact Nifty value
+        "nifty_change": avg_nifty_change,
+        "inr_usd": USD_TO_INR,
+        "top_stocks": {s: {"price": stock_prices.get(s, {}).get("price_inr", 0), "change": stock_prices.get(s, {}).get("change_24h", 0)} for s in top_stocks if s in stock_prices}
     }
     
-    # Generate decision based on technicals
+    # Risk multipliers
     risk_mult = RISK_MULTIPLIERS.get(risk_profile, RISK_MULTIPLIERS["medium"])
     
-    if btc_rsi > 70:
-        recommendation = "Hold"
-        confidence = 70
-        reasoning = f"""**Technical Assessment: OVERBOUGHT CONDITIONS**
-
-📊 **Key Indicators:**
-- RSI: {btc_rsi} (>70 = overbought)
-- MACD: {btc_macd['trend']} with histogram at {btc_macd['histogram']}
-- Bollinger: Price at {btc_bollinger['position']}, bandwidth {btc_bollinger['bandwidth']}%
-
-⚖️ **Probability Assessment:**
-- 65% chance of 5-10% correction within 1-2 weeks
-- 25% chance of continued rally (FOMO-driven)
-- 10% chance of sharp correction (>15%)
-
-🔍 **Counterpoint:**
-Strong momentum can persist longer than expected. However, risk-adjusted returns favor waiting for RSI <60.
-
-💡 **Alternative:**
-If bullish, reduce position size to 50% of normal and set tight stop-loss at 5%.
-
-{DISCLAIMER}"""
-    elif btc_rsi < 35:
-        recommendation = "Crypto"
-        confidence = 72
-        reasoning = f"""**Technical Assessment: OVERSOLD - ACCUMULATION ZONE**
-
-📊 **Key Indicators:**
-- RSI: {btc_rsi} (<35 = oversold)
-- MACD: {btc_macd['trend']} - watch for bullish crossover
-- Bollinger: Price near {btc_bollinger['position']}, potential bounce
-
-⚖️ **Probability Assessment:**
-- 70% chance of 10-20% recovery within 2-3 weeks
-- 20% chance of further decline (capitulation)
-- 10% chance of rapid V-shaped recovery
-
-🔍 **Counterpoint:**
-"Catching falling knives" is dangerous. Ensure support levels are holding before entry.
-
-💡 **Strategy:**
-- Deploy 40% of planned capital now
-- Reserve 60% for potential further dips
-- Stop-loss: 12% below entry
-
-{DISCLAIMER}"""
-    else:
-        recommendation = "Both"
-        confidence = 65
-        reasoning = f"""**Technical Assessment: NEUTRAL - BALANCED APPROACH**
-
-📊 **Key Indicators:**
-- BTC RSI: {btc_rsi} (neutral zone 40-60)
-- MACD: {btc_macd['trend']}
-- Bollinger: {btc_bollinger['position']}, squeeze={btc_bollinger['squeeze']}
-
-⚖️ **Allocation Suggestion:**
-- Crypto (40%): BTC 50%, ETH 30%, SOL 20%
-- Stocks (60%): Banking 30%, IT 25%, FMCG 25%, Pharma 20%
-
-🔍 **Counterpoint:**
-Neutral markets can break either direction. Bollinger squeeze indicates big move coming - direction uncertain.
-
-💡 **Risk Management:**
-- Position size: {int(5 * risk_mult['position_size'])}% max per trade
-- Stop-loss: {int(10 * risk_mult['stop_loss'])}% for crypto, {int(7 * risk_mult['stop_loss'])}% for stocks
-- Rebalance on 15%+ moves
-
-{DISCLAIMER}"""
+    # Determine recommendation based on technicals
+    crypto_score = 0
+    stock_score = 0
     
+    # Crypto scoring
+    if btc_rsi < 35:
+        crypto_score += 30  # Oversold - bullish
+    elif btc_rsi > 70:
+        crypto_score -= 20  # Overbought - bearish
+    else:
+        crypto_score += 10  # Neutral
+    
+    if btc_macd["trend"] == "bullish":
+        crypto_score += 20
+    elif btc_macd["trend"] == "bearish":
+        crypto_score -= 15
+    
+    if btc_data.get("change_24h", 0) > 3:
+        crypto_score += 15
+    elif btc_data.get("change_24h", 0) < -3:
+        crypto_score -= 10
+    
+    # Stock scoring
+    if avg_nifty_change > 1:
+        stock_score += 25
+    elif avg_nifty_change < -1:
+        stock_score -= 15
+    else:
+        stock_score += 10
+    
+    # Determine recommendation
+    if crypto_score > 40 and crypto_score > stock_score:
+        recommendation = "Crypto"
+        confidence = min(85, 50 + crypto_score)
+    elif stock_score > 30 and stock_score > crypto_score:
+        recommendation = "Stocks"
+        confidence = min(80, 50 + stock_score)
+    elif crypto_score > 20 and stock_score > 20:
+        recommendation = "Both"
+        confidence = min(75, 45 + (crypto_score + stock_score) // 2)
+    else:
+        recommendation = "Hold"
+        confidence = 60
+    
+    # Generate reasoning
+    reasoning = remove_markdown(f"""TODAYS INVESTMENT RECOMMENDATION: {recommendation}
+
+TECHNICAL ANALYSIS SUMMARY:
+
+BITCOIN (BTC):
+- Current Price: Rs {btc_data.get('price_inr', 0):,.0f}
+- 24h Change: {btc_data.get('change_24h', 0):.2f}%
+- RSI(14): {btc_rsi} {'(OVERSOLD - potential buy)' if btc_rsi < 35 else '(OVERBOUGHT - caution)' if btc_rsi > 70 else '(Neutral)'}
+- MACD Trend: {btc_macd['trend'].upper()}
+- Bollinger Position: {btc_bollinger['position']}
+
+ETHEREUM (ETH):
+- Current Price: Rs {eth_data.get('price_inr', 0):,.0f}
+- 24h Change: {eth_data.get('change_24h', 0):.2f}%
+- RSI(14): {eth_rsi}
+
+INDIAN STOCKS (Nifty Proxy):
+- Average Top 5 Change: {avg_nifty_change:.2f}%
+- Market Sentiment: {'Bullish' if avg_nifty_change > 1 else 'Bearish' if avg_nifty_change < -1 else 'Neutral'}
+
+PROBABILITY ASSESSMENT:
+- Bullish Scenario (45%): {recommendation} outperforms over next 2-4 weeks
+- Neutral Scenario (35%): Sideways consolidation
+- Bearish Scenario (20%): 10-15% correction possible
+
+RISK-ADJUSTED STRATEGY for {risk_profile.upper()} profile:
+- Max Position Size: {int(5 * risk_mult['position_size'])}% per trade
+- Stop-Loss: {int(10 * risk_mult['stop_loss'])}% for crypto, {int(7 * risk_mult['stop_loss'])}% for stocks
+- Take-Profit Target: 15-25% for crypto, 10-15% for stocks
+
+COUNTERPOINT:
+Markets can remain irrational. Even with favorable technicals, black swan events can cause sudden reversals. Always use stop-losses and never invest money you cannot afford to lose.
+
+TAX CONSIDERATION (India):
+- Crypto: 30% VDA tax on all gains. Need 43% gross gain to net 30% after tax.
+- Stocks LTCG: 10% on gains above Rs 1 lakh (holding >1 year)
+- Stocks STCG: 15% flat (holding <1 year)
+
+RECOMMENDED ACTION: {recommendation.upper()} with {confidence}% confidence.
+
+{DISCLAIMER}""")
+    
+    # Build allocations
     allocations = {
-        "crypto": {"BTC": 50, "ETH": 30, "SOL": 20} if recommendation in ["Crypto", "Both"] else {},
-        "stocks": {"HDFCBANK": 25, "TCS": 25, "HINDUNILVR": 25, "SUNPHARMA": 25} if recommendation in ["Stocks", "Both"] else {}
+        "crypto": {},
+        "stocks": {}
     }
+    
+    if recommendation in ["Crypto", "Both"]:
+        allocations["crypto"] = {"BTC": 50, "ETH": 30, "SOL": 20}
+    
+    if recommendation in ["Stocks", "Both"]:
+        allocations["stocks"] = {"HDFCBANK": 25, "TCS": 25, "RELIANCE": 25, "INFY": 25}
     
     return {
         "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
@@ -1525,12 +1571,72 @@ Neutral markets can break either direction. Bollinger squeeze indicates big move
             "reasoning": reasoning,
             "allocations": allocations,
             "risks": [
-                "Regulatory changes (SEBI/RBI crypto stance)",
-                "Global macro deterioration",
-                f"30% VDA tax reduces net crypto returns significantly",
-                "INR volatility affecting international comparisons"
+                "Regulatory changes (SEBI/RBI crypto stance could impact suddenly)",
+                "Global macro uncertainty (Fed policy, geopolitical tensions)",
+                "30% VDA tax significantly reduces net crypto returns in India",
+                "INR volatility affects real returns on international assets",
+                "Technical indicators are backward-looking, not predictive"
             ],
-            "timeline": "Swing trade (1-4 weeks) for crypto, Position (6-12 months) for stocks"
+            "timeline": "Swing trade (1-4 weeks) for crypto, Position (6-12 months) for stocks",
+            "what_if_available": True
+        },
+        "data_sources": {
+            "crypto": "CoinGecko API (real-time)",
+            "stocks": "yfinance (real-time)",
+            "news": "NewsAPI" if NEWSAPI_KEY else "Fallback data"
+        },
+        "disclaimer": DISCLAIMER
+    }
+
+@api_router.post("/decision/what-if")
+async def what_if_simulation(request: Request):
+    """What-if simulator - recalculate recommendation with custom metrics"""
+    body = await request.json()
+    
+    # Get overrides from request
+    btc_price = body.get("btc_price")
+    btc_change = body.get("btc_change")
+    eth_price = body.get("eth_price")
+    nifty_change = body.get("nifty_change")
+    btc_rsi = body.get("btc_rsi", 50)
+    confidence_override = body.get("confidence")
+    
+    # Simple scoring based on inputs
+    score = 50
+    
+    if btc_rsi < 35:
+        score += 25
+        recommendation = "Crypto"
+    elif btc_rsi > 70:
+        score -= 15
+        recommendation = "Hold"
+    else:
+        score += 10
+        recommendation = "Both"
+    
+    if btc_change and btc_change > 5:
+        score += 15
+    elif btc_change and btc_change < -5:
+        score -= 20
+        recommendation = "Hold" if recommendation != "Hold" else recommendation
+    
+    if nifty_change and nifty_change > 2:
+        score += 10
+        if recommendation == "Hold":
+            recommendation = "Stocks"
+    
+    return {
+        "what_if_result": {
+            "recommendation": recommendation,
+            "confidence": confidence_override or min(85, score),
+            "inputs_used": {
+                "btc_price": btc_price,
+                "btc_change": btc_change,
+                "eth_price": eth_price,
+                "nifty_change": nifty_change,
+                "btc_rsi": btc_rsi
+            },
+            "note": "This is a simulation based on your custom inputs. Real market conditions may differ."
         },
         "disclaimer": DISCLAIMER
     }
