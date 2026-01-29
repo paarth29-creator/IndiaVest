@@ -1494,7 +1494,12 @@ async def get_news(category: Optional[str] = None, search: Optional[str] = None,
                 f"Category: {item['category']}, Impact: {item.get('impact_level', 'medium')}"
             )
         else:
-            analysis = ai_service._generate_mock_analysis(item['category'])
+            # Pass news-specific content for UNIQUE analysis per item
+            analysis = ai_service._generate_mock_analysis(
+                context=item.get('category', ''),
+                news_title=item.get('title', ''),
+                news_summary=item.get('summary', '')
+            )
         
         # Clean analysis of any markdown
         analysis = remove_markdown(analysis)
