@@ -82,6 +82,13 @@ export default function DecisionScreen() {
 
   useEffect(() => {
     fetchDecision();
+    
+    // Auto-refresh every 60 seconds
+    const interval = setInterval(() => {
+      fetchDecision();
+    }, 60000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const fetchDecision = async () => {
