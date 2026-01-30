@@ -60,6 +60,13 @@ interface DayTradingData {
 }
 
 interface PersonalizedData {
+  should_trade: boolean;
+  decision: string;
+  decision_reason?: string;
+  alternatives?: Array<{
+    action: string;
+    description: string;
+  }>;
   summary: {
     capital_input: number;
     total_deployed: number;
@@ -82,6 +89,11 @@ interface PersonalizedData {
   };
   recommendations: Recommendation[];
   overall_reasoning: string;
+  market_conditions?: {
+    avg_volatility: number;
+    total_volume_usd: number;
+    sentiment: string;
+  };
 }
 
 export default function DayTradingScreen() {
