@@ -92,6 +92,7 @@ export default function DayTradingScreen() {
   const [personalizedLoading, setPersonalizedLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCoin, setSelectedCoin] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   
   // Capital input state
   const [capitalInput, setCapitalInput] = useState('');
@@ -100,6 +101,14 @@ export default function DayTradingScreen() {
 
   useEffect(() => {
     fetchData();
+    
+    // Auto-refresh every 60 seconds
+    const interval = setInterval(() => {
+      fetchData();
+      setLastRefresh(new Date());
+    }, 60000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const fetchData = async () => {
@@ -142,6 +151,7 @@ export default function DayTradingScreen() {
       await fetchPersonalized(capitalSlider);
     }
     setRefreshing(false);
+    setLastRefresh(new Date());
   };
 
   const handleCapitalSubmit = () => {
