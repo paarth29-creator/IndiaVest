@@ -2335,15 +2335,25 @@ RISK: {win_probability}% win probability | Max loss Rs {loss_scenario:,.0f} | Be
         ]
     }
     
-    return {
+    result = {
+        "should_trade": True,
+        "decision": "YES - PROCEED WITH TRADING",
         "summary": summary,
         "recommendations": recommendations,
         "market_conditions": {
             "total_volume_usd": float(total_volume / USD_TO_INR),
             "avg_volatility": round(avg_volatility, 2),
-            "tradeable_coins_count": len(tradeable_coins)
+            "tradeable_coins_count": len(tradeable_coins),
+            "sentiment": market_sentiment
         },
-        "overall_reasoning": strip_markdown(f"""FULL DEPLOYMENT DAY TRADING PLAN - Rs {capital:,.0f}
+        "overall_reasoning": strip_markdown(f"""TRADING DECISION: YES - PROCEED WITH FULL DEPLOYMENT
+
+MARKET CONDITIONS FAVORABLE:
+- Volatility: {avg_volatility:.1f}% (ideal 2-10% range)
+- Market Sentiment: {market_sentiment.upper()}
+- Total Volume: ${total_volume/USD_TO_INR/1e9:.1f}B (good liquidity)
+
+FULL DEPLOYMENT PLAN - Rs {capital:,.0f}
 
 CAPITAL DEPLOYMENT:
 Total Amount: Rs {capital:,.0f}
@@ -2373,6 +2383,14 @@ Only proceed if you can afford to lose the full Rs {capital:,.0f}. Day trading h
 {DISCLAIMER}"""),
         "disclaimer": DISCLAIMER
     }
+    
+    # Cache the result for consistency
+    set_cached_advice(cache_key, result)
+    
+    # Reset random seed to avoid affecting other code
+    random.seed()
+    
+    return result
 
 # ==================== HIGH RISK / HIGH REWARD ====================
 
