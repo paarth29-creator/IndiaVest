@@ -834,6 +834,51 @@ const styles = StyleSheet.create({
     width: 100,
     textAlign: 'right',
   },
+  decisionBanner: {
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  decisionText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  decisionReason: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  alternativesSection: {
+    marginBottom: 16,
+  },
+  alternativesTitle: {
+    color: '#f59e0b',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  alternativeCard: {
+    backgroundColor: '#1a1a2e',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#f59e0b',
+  },
+  alternativeAction: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  alternativeDesc: {
+    color: '#9ca3af',
+    fontSize: 13,
+  },
   personalizedCard: {
     backgroundColor: '#1a1a2e',
     borderRadius: 12,
