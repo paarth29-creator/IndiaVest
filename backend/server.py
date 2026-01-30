@@ -2064,36 +2064,119 @@ async def get_personalized_day_trading(request: Request):
     if capital <= 0:
         return {"error": "Please enter a valid capital amount > 0"}
     
+    # Check cache for consistent results
+    cache_key = get_cache_key(capital, risk_profile)
+    cached_result = get_cached_advice(cache_key)
+    if cached_result:
+        return cached_result
+    
     crypto_prices = await crypto_service.get_prices()
     
-    # Analyze market conditions
+    # Analyze market conditions to decide YES/NO
     total_volume = sum(c.get("volume_24h", 0) for c in crypto_prices.values())
     avg_volatility = float(np.mean([abs(c.get("change_24h", 0)) for c in crypto_prices.values()]))
+    positive_coins = sum(1 for c in crypto_prices.values() if c.get("change_24h", 0) > 0)
+    negative_coins = len(crypto_prices) - positive_coins
+    market_sentiment = "bullish" if positive_coins > negative_coins else "bearish" if negative_coins > positive_coins else "neutral"
     
-    # Get ALL tradeable coins (not just top 5 by market cap)
-    # Filter: exclude stablecoins, require minimum volume
-    stablecoins = {"USDT", "USDC", "BUSD", "DAI", "TUSD", "FDUSD", "USDP"}
+    # Decision: Should we trade today?
+    should_trade = True
+    trade_decision_reason = ""
+    
+    # Conditions to NOT trade
+    if avg_volatility < 1.0:
+        should_trade = False
+        trade_decision_reason = "Market volatility too low (<1%). Wait for better opportunities."
+    elif avg_volatility > 15:
+        should_trade = False
+        trade_decision_reason = "Market too volatile (>15%). High risk of flash crashes. Consider waiting."
+    elif total_volume / USD_TO_INR < 10e9:  # Less than $10B total volume
+        should_trade = False
+        trade_decision_reason = "Low market liquidity. Slippage risk is high."
+    
+    # If NO trade, return alternatives
+    if not should_trade:
+        result = {
+            "should_trade": False,
+            "decision": "NO - NOT RECOMMENDED TODAY",
+            "decision_reason": trade_decision_reason,
+            "alternatives": [
+                {"action": "HOLD CASH", "description": "Keep your Rs " + f"{capital:,.0f}" + " in savings. Wait for better market conditions."},
+                {"action": "LONG-TERM STOCKS", "description": "Consider putting into Nifty 50 index funds for 6-12 month horizon."},
+                {"action": "PAPER TRADE", "description": "Practice with virtual money today to learn without risk."},
+            ],
+            "market_conditions": {
+                "avg_volatility": round(avg_volatility, 2),
+                "total_volume_usd": float(total_volume / USD_TO_INR),
+                "sentiment": market_sentiment
+            },
+            "summary": {
+                "capital_input": capital,
+                "total_deployed": 0,
+                "deployment_pct": 0,
+                "positions_count": 0,
+                "expected_yield_range": {
+                    "best_case_inr": 0,
+                    "best_case_pct": 0,
+                    "expected_inr": 0,
+                    "expected_pct": 0,
+                    "worst_case_inr": 0,
+                    "worst_case_pct": 0,
+                    "probability_profit_overall": 0
+                },
+                "allocation_breakdown": []
+            },
+            "recommendations": [],
+            "overall_reasoning": strip_markdown(f"""TRADING DECISION: NO - NOT RECOMMENDED TODAY
+
+REASON: {trade_decision_reason}
+
+MARKET CONDITIONS:
+- Average Volatility: {avg_volatility:.1f}%
+- Market Sentiment: {market_sentiment.upper()}
+- Total Volume: ${total_volume/USD_TO_INR/1e9:.1f}B
+
+ALTERNATIVES:
+1. HOLD CASH - Keep your Rs {capital:,.0f} safe. Missing one day costs nothing.
+2. LONG-TERM INVESTING - Put into Nifty 50 ETF for steady 12-15% annual returns.
+3. PAPER TRADE - Practice with virtual money to build skills without risk.
+
+REMEMBER: The best traders know when NOT to trade. Protecting capital is more important than seeking profits.
+
+{DISCLAIMER}"""),
+            "disclaimer": DISCLAIMER
+        }
+        set_cached_advice(cache_key, result)
+        return result
+    
+    # YES - Proceed with full deployment
+    # Use deterministic seed based on capital + hour for consistent results
+    seed_value = int(capital) + int(datetime.now().strftime("%Y%m%d%H"))
+    random.seed(seed_value)
+    
+    # Get ALL tradeable coins (not just top by market cap)
+    stablecoins = {"USDT", "USDC", "BUSD", "DAI", "TUSD", "FDUSD", "USDP", "PYUSD"}
     tradeable_coins = []
     
     for symbol, data in crypto_prices.items():
         if symbol in stablecoins:
-            continue  # Skip stablecoins for day trading
+            continue
         volume_usd = data.get("volume_24h", 0) / USD_TO_INR
-        change_24h = abs(data.get("change_24h", 0))
+        change_24h = data.get("change_24h", 0)
+        abs_change = abs(change_24h)
         
-        # Require minimum $100M volume for liquidity
-        if volume_usd > 100000000:
-            # Calculate momentum score
+        # Require minimum $100M volume and >1.5% volatility for day trading
+        if volume_usd > 100000000 and abs_change > 1.5:
             momentum = 1 if change_24h > 0 else -1
-            volatility_score = min(change_24h / 2, 5)  # Cap at 5
-            volume_score = min(volume_usd / 1e9, 5)  # Cap at 5
-            combined_score = volatility_score * volume_score * (1 + 0.2 * momentum)
+            volatility_score = min(abs_change / 2, 5)
+            volume_score = min(volume_usd / 1e9, 5)
+            combined_score = volatility_score * volume_score * (1 + 0.3 * momentum)
             
             tradeable_coins.append({
                 "symbol": symbol,
                 "name": data.get("name", symbol),
                 "price_inr": float(data.get("price_inr", 0)),
-                "change_24h": float(data.get("change_24h", 0)),
+                "change_24h": float(change_24h),
                 "volume_24h": float(data.get("volume_24h", 0)),
                 "volume_usd": float(volume_usd),
                 "score": combined_score
@@ -2102,28 +2185,14 @@ async def get_personalized_day_trading(request: Request):
     risk_mult = RISK_MULTIPLIERS.get(risk_profile, RISK_MULTIPLIERS["medium"])
     
     # FULL DEPLOYMENT: Allocate 100% of capital across 3-5 positions
-    # Max 30-40% per coin for diversification
-    num_positions = random.choice([3, 4, 5])  # Variety in position count
-    max_per_coin_pct = 0.35  # 35% max per coin
+    num_positions = random.choice([3, 4, 5])
     
-    # Diversified coin selection: 
-    # - Sort by score but shuffle top 10-15 to add variety
+    # Deterministic but varied coin selection
     sorted_coins = sorted(tradeable_coins, key=lambda x: x["score"], reverse=True)[:15]
-    random.shuffle(sorted_coins)  # Add randomness for variety
-    
-    # Re-sort by score after shuffle to get top picks from shuffled list
+    random.shuffle(sorted_coins)
     selected_coins = sorted(sorted_coins[:8], key=lambda x: x["score"], reverse=True)[:num_positions]
     
-    # Calculate allocation percentages (vary them for realism)
-    allocation_templates = [
-        [35, 30, 25, 10],  # 4 coins
-        [35, 25, 20, 15, 5],  # 5 coins
-        [40, 35, 25],  # 3 coins
-        [30, 30, 25, 15],  # 4 coins balanced
-        [30, 25, 20, 15, 10],  # 5 coins spread
-    ]
-    
-    # Pick template based on num_positions
+    # Fixed allocation templates (deterministic based on seed)
     if num_positions == 3:
         allocations = [40, 35, 25]
     elif num_positions == 4:
