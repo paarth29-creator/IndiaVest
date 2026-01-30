@@ -391,63 +391,91 @@ export default function DayTradingScreen() {
           {/* Personalized Results */}
           {showPersonalized && personalizedData && (
             <View style={styles.personalizedSection}>
-              <Text style={styles.sectionTitle}>Full Deployment Plan</Text>
+              {/* Decision Banner */}
+              <View style={[styles.decisionBanner, { backgroundColor: personalizedData.should_trade ? '#10b981' : '#ef4444' }]}>
+                <Text style={styles.decisionText}>{personalizedData.decision}</Text>
+                {personalizedData.decision_reason && (
+                  <Text style={styles.decisionReason}>{personalizedData.decision_reason}</Text>
+                )}
+              </View>
               
-              {/* Summary Card */}
-              <View style={styles.summaryCard}>
-                <View style={styles.summaryRow}>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryLabel}>Your Capital</Text>
-                    <Text style={styles.summaryValue}>{formatCurrency(personalizedData.summary.capital_input)}</Text>
-                  </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryLabel}>Deployed Today</Text>
-                    <Text style={[styles.summaryValue, { color: '#10b981' }]}>{formatCurrency(personalizedData.summary.total_deployed)} ({personalizedData.summary.deployment_pct}%)</Text>
-                  </View>
-                </View>
-                <View style={styles.summaryRow}>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryLabel}>Positions</Text>
-                    <Text style={styles.summaryValue}>{personalizedData.summary.positions_count} coins</Text>
-                  </View>
-                  <View style={styles.summaryItem}>
-                    <Text style={styles.summaryLabel}>Win Probability</Text>
-                    <Text style={styles.summaryValue}>{personalizedData.summary.expected_yield_range.probability_profit_overall}%</Text>
-                  </View>
-                </View>
-                
-                {/* Allocation Breakdown */}
-                <View style={styles.allocationSection}>
-                  <Text style={styles.allocationTitle}>Allocation Breakdown</Text>
-                  {personalizedData.summary.allocation_breakdown?.map((alloc, i) => (
-                    <View key={i} style={styles.allocationRow}>
-                      <Text style={styles.allocationCoin}>{alloc.symbol}</Text>
-                      <View style={styles.allocationBarContainer}>
-                        <View style={[styles.allocationBar, { width: `${alloc.pct}%` }]} />
-                      </View>
-                      <Text style={styles.allocationAmount}>{formatCurrency(alloc.amount)} ({alloc.pct}%)</Text>
+              {/* NO-Trade Alternatives */}
+              {!personalizedData.should_trade && personalizedData.alternatives && (
+                <View style={styles.alternativesSection}>
+                  <Text style={styles.alternativesTitle}>Recommended Alternatives</Text>
+                  {personalizedData.alternatives.map((alt, i) => (
+                    <View key={i} style={styles.alternativeCard}>
+                      <Text style={styles.alternativeAction}>{alt.action}</Text>
+                      <Text style={styles.alternativeDesc}>{alt.description}</Text>
                     </View>
                   ))}
                 </View>
-                
-                <View style={styles.expectedYield}>
-                  <Text style={styles.yieldTitle}>Expected EOD Outcome</Text>
-                  <View style={styles.yieldRow}>
-                    <Text style={[styles.yieldValue, { color: '#10b981' }]}>
-                      Best: +{formatCurrency(personalizedData.summary.expected_yield_range.best_case_inr)} (+{personalizedData.summary.expected_yield_range.best_case_pct}%)
-                    </Text>
-                    <Text style={styles.yieldValue}>
-                      Exp: {personalizedData.summary.expected_yield_range.expected_inr >= 0 ? '+' : ''}{formatCurrency(personalizedData.summary.expected_yield_range.expected_inr)}
-                    </Text>
-                    <Text style={[styles.yieldValue, { color: '#ef4444' }]}>
-                      Worst: {formatCurrency(personalizedData.summary.expected_yield_range.worst_case_inr)} ({personalizedData.summary.expected_yield_range.worst_case_pct}%)
-                    </Text>
+              )}
+              
+              {/* YES-Trade: Show full deployment plan */}
+              {personalizedData.should_trade && (
+                <>
+                  <Text style={styles.sectionTitle}>Full Deployment Plan</Text>
+                  
+                  {/* Summary Card */}
+                  <View style={styles.summaryCard}>
+                    <View style={styles.summaryRow}>
+                      <View style={styles.summaryItem}>
+                        <Text style={styles.summaryLabel}>Your Capital</Text>
+                        <Text style={styles.summaryValue}>{formatCurrency(personalizedData.summary?.capital_input || 0)}</Text>
+                      </View>
+                      <View style={styles.summaryItem}>
+                        <Text style={styles.summaryLabel}>Deployed Today</Text>
+                        <Text style={[styles.summaryValue, { color: '#10b981' }]}>{formatCurrency(personalizedData.summary?.total_deployed || 0)} ({personalizedData.summary?.deployment_pct || 0}%)</Text>
+                      </View>
+                    </View>
+                    <View style={styles.summaryRow}>
+                      <View style={styles.summaryItem}>
+                        <Text style={styles.summaryLabel}>Positions</Text>
+                        <Text style={styles.summaryValue}>{personalizedData.summary?.positions_count || 0} coins</Text>
+                      </View>
+                      <View style={styles.summaryItem}>
+                        <Text style={styles.summaryLabel}>Win Probability</Text>
+                        <Text style={styles.summaryValue}>{personalizedData.summary?.expected_yield_range?.probability_profit_overall || 0}%</Text>
+                      </View>
+                    </View>
+                    
+                    {/* Allocation Breakdown */}
+                    {personalizedData.summary?.allocation_breakdown && personalizedData.summary.allocation_breakdown.length > 0 && (
+                      <View style={styles.allocationSection}>
+                        <Text style={styles.allocationTitle}>Allocation Breakdown</Text>
+                        {personalizedData.summary.allocation_breakdown.map((alloc, i) => (
+                          <View key={i} style={styles.allocationRow}>
+                            <Text style={styles.allocationCoin}>{alloc.symbol}</Text>
+                            <View style={styles.allocationBarContainer}>
+                              <View style={[styles.allocationBar, { width: `${alloc.pct}%` }]} />
+                            </View>
+                            <Text style={styles.allocationAmount}>{formatCurrency(alloc.amount)} ({alloc.pct}%)</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                    
+                    <View style={styles.expectedYield}>
+                      <Text style={styles.yieldTitle}>Expected EOD Outcome</Text>
+                      <View style={styles.yieldRow}>
+                        <Text style={[styles.yieldValue, { color: '#10b981' }]}>
+                          Best: +{formatCurrency(personalizedData.summary?.expected_yield_range?.best_case_inr || 0)} (+{personalizedData.summary?.expected_yield_range?.best_case_pct || 0}%)
+                        </Text>
+                        <Text style={styles.yieldValue}>
+                          Exp: {(personalizedData.summary?.expected_yield_range?.expected_inr || 0) >= 0 ? '+' : ''}{formatCurrency(personalizedData.summary?.expected_yield_range?.expected_inr || 0)}
+                        </Text>
+                        <Text style={[styles.yieldValue, { color: '#ef4444' }]}>
+                          Worst: {formatCurrency(personalizedData.summary?.expected_yield_range?.worst_case_inr || 0)} ({personalizedData.summary?.expected_yield_range?.worst_case_pct || 0}%)
+                        </Text>
+                      </View>
+                    </View>
                   </View>
-                </View>
-              </View>
 
-              {/* Personalized Recommendations */}
-              {personalizedData.recommendations.map((rec, index) => renderPersonalizedRecommendation(rec, index))}
+                  {/* Personalized Recommendations */}
+                  {personalizedData.recommendations && personalizedData.recommendations.map((rec, index) => renderPersonalizedRecommendation(rec, index))}
+                </>
+              )}
 
               {/* Overall Reasoning */}
               <View style={styles.reasoningCard}>
