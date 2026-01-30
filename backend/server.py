@@ -59,6 +59,37 @@ For EDUCATIONAL/VIRTUAL use only. Never invest money you cannot afford to lose c
 # INR conversion rate (will be fetched dynamically)
 USD_TO_INR = 83.50
 
+# ==================== CACHING SYSTEM ====================
+# Cache for personalized advice to ensure consistency
+PERSONALIZED_ADVICE_CACHE = {}
+CACHE_TTL_SECONDS = 300  # 5 minute cache for same inputs
+
+def get_cache_key(capital: float, risk_profile: str) -> str:
+    """Generate cache key based on amount (rounded) and hour"""
+    hour_key = datetime.now().strftime("%Y%m%d%H")  # Changes every hour
+    amount_key = int(capital / 1000) * 1000  # Round to nearest 1000
+    return f"{amount_key}_{risk_profile}_{hour_key}"
+
+def get_cached_advice(cache_key: str) -> Optional[Dict]:
+    """Get cached advice if still valid"""
+    if cache_key in PERSONALIZED_ADVICE_CACHE:
+        cached_time, cached_data = PERSONALIZED_ADVICE_CACHE[cache_key]
+        if (datetime.now() - cached_time).seconds < CACHE_TTL_SECONDS:
+            return cached_data
+        else:
+            del PERSONALIZED_ADVICE_CACHE[cache_key]
+    return None
+
+def set_cached_advice(cache_key: str, data: Dict):
+    """Cache the advice"""
+    PERSONALIZED_ADVICE_CACHE[cache_key] = (datetime.now(), data)
+    # Clean old entries
+    for key in list(PERSONALIZED_ADVICE_CACHE.keys()):
+        if key != cache_key:
+            cached_time, _ = PERSONALIZED_ADVICE_CACHE[key]
+            if (datetime.now() - cached_time).seconds > CACHE_TTL_SECONDS * 2:
+                del PERSONALIZED_ADVICE_CACHE[key]
+
 # Risk tolerance multipliers
 RISK_MULTIPLIERS = {
     "low": {"position_size": 0.5, "stop_loss": 1.5, "volatility_threshold": 0.5},
