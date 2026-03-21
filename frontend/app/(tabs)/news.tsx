@@ -305,7 +305,6 @@ export default function NewsScreen() {
               </View>
             </View>
           )}
-          </View>
         </View>
 
         {isExpanded && (
