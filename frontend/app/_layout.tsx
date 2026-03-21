@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GlossaryProvider } from './(tabs)/FinanceTooltip';
 
 function RootLayoutNav() {
   const { isLoading } = useAuth();
