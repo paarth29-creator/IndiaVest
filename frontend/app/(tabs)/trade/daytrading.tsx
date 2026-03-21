@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import Slider from '@react-native-community/slider';
+import { InfoButton, GlossaryScreen } from '../FinanceTooltip';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -116,6 +117,7 @@ export default function DayTradingScreen() {
   const [capitalInput, setCapitalInput] = useState('');
   const [capitalSlider, setCapitalSlider] = useState(10000);
   const [showPersonalized, setShowPersonalized] = useState(false);
+  const [showGlossary, setShowGlossary] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -129,12 +131,50 @@ export default function DayTradingScreen() {
     return () => clearInterval(interval);
   }, []);
 
+  // Log recommendations for track record accountability
+  const logRecommendation = async (type: string, recommendation: string, confidence: number, assets: any[], capital?: number) => {
+    try {
+      await fetch(`${API_URL}/api/recommendations/log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          recommendation,
+          confidence,
+          assets: assets.map(a => ({
+            symbol: a.symbol,
+            price_at_recommendation: a.current_price_inr,
+            action: recommendation
+          })),
+          capital: capital || 0,
+          risk_profile: 'medium',
+          market_snapshot: {
+            timestamp: new Date().toISOString()
+          }
+        })
+      });
+    } catch (error) {
+      // Silent fail - logging should never break the app
+      console.log('Recommendation logging skipped:', error);
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_URL}/api/daytrading/should-trade`);
       const result = await response.json();
       setData(result);
+
+      // Log the general recommendation for track record
+      if (result?.top_5_recommendations?.length > 0) {
+        logRecommendation(
+          'daytrading_general',
+          result.should_trade ? 'TRADE' : 'NO_TRADE',
+          result.confidence || 0,
+          result.top_5_recommendations
+        );
+      }
     } catch (error) {
       console.error('Error fetching day trading data:', error);
     } finally {
@@ -155,6 +195,17 @@ export default function DayTradingScreen() {
       const result = await response.json();
       setPersonalizedData(result);
       setShowPersonalized(true);
+
+      // Log the personalized recommendation for track record
+      if (result?.recommendations?.length > 0) {
+        logRecommendation(
+          'daytrading_personalized',
+          result.should_trade ? 'TRADE' : 'NO_TRADE',
+          result.summary?.expected_yield_range?.probability_profit_overall || 0,
+          result.recommendations,
+          capital
+        );
+      }
     } catch (error) {
       console.error('Error fetching personalized data:', error);
     } finally {
@@ -268,9 +319,15 @@ export default function DayTradingScreen() {
         {isExpanded && (
           <View style={styles.expandedContent}>
             <View style={styles.detailSection}>
-              <Text style={styles.detailTitle}>ENTRY STRATEGY</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.detailTitle}>ENTRY STRATEGY</Text>
+                <InfoButton termKey="entry_range" size={14} />
+              </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Entry Range</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.detailLabel}>Entry Range</Text>
+                  <InfoButton termKey="entry_range" size={12} />
+                </View>
                 <Text style={styles.detailValue}>
                   {formatCurrency(rec.entry_range.low)} - {formatCurrency(rec.entry_range.high)}
                 </Text>
@@ -284,17 +341,26 @@ export default function DayTradingScreen() {
             <View style={styles.detailSection}>
               <Text style={styles.detailTitle}>EXIT STRATEGY</Text>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Stop Loss</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.detailLabel}>Stop Loss</Text>
+                  <InfoButton termKey="stop_loss" size={12} />
+                </View>
                 <Text style={[styles.detailValue, { color: '#ef4444' }]}>
                   {formatCurrency(rec.stop_loss)} (-{rec.stop_loss_pct}%)
                 </Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>TP1 (1:1)</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.detailLabel}>TP1 (1:1)</Text>
+                  <InfoButton termKey="take_profit" size={12} />
+                </View>
                 <Text style={[styles.detailValue, { color: '#10b981' }]}>{formatCurrency(rec.take_profit.tp1_1to1)}</Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>TP2 (1:2)</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={styles.detailLabel}>TP2 (1:2)</Text>
+                  <InfoButton termKey="risk_reward_ratio" size={12} />
+                </View>
                 <Text style={[styles.detailValue, { color: '#10b981' }]}>{formatCurrency(rec.take_profit.tp2_1to2 ?? rec.take_profit.tp2_1to1_5 ?? 0)}</Text>
               </View>
               <View style={styles.detailRow}>
@@ -330,7 +396,17 @@ export default function DayTradingScreen() {
           <Text style={styles.headerTitle}>Day Trading</Text>
           <Text style={styles.headerSubtitle}>Crypto Intraday Analysis</Text>
         </View>
+        <TouchableOpacity 
+          style={styles.glossaryButton} 
+          onPress={() => setShowGlossary(true)}
+        >
+          <Ionicons name="book-outline" size={20} color="#f59e0b" />
+          <Text style={styles.glossaryButtonText}>Learn</Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Finance Glossary Modal */}
+      <GlossaryScreen visible={showGlossary} onClose={() => setShowGlossary(false)} />
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -442,7 +518,10 @@ export default function DayTradingScreen() {
                         <Text style={styles.summaryValue}>{personalizedData.summary?.positions_count || 0} coins</Text>
                       </View>
                       <View style={styles.summaryItem}>
-                        <Text style={styles.summaryLabel}>Win Probability</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={styles.summaryLabel}>Win Probability</Text>
+                          <InfoButton termKey="win_probability" size={13} />
+                        </View>
                         <Text style={styles.summaryValue}>{personalizedData.summary?.expected_yield_range?.probability_profit_overall || 0}%</Text>
                       </View>
                     </View>
@@ -514,7 +593,10 @@ export default function DayTradingScreen() {
 
                 <View style={styles.confidenceContainer}>
                   <View style={styles.confidenceHeader}>
-                    <Text style={styles.confidenceLabel}>Confidence</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={styles.confidenceLabel}>Confidence</Text>
+                      <InfoButton termKey="confidence_score" size={14} />
+                    </View>
                     <Text style={styles.confidenceValue}>{data?.confidence?.toFixed(0)}%</Text>
                   </View>
                   <View style={styles.confidenceBar}>
@@ -529,22 +611,34 @@ export default function DayTradingScreen() {
               </View>
 
               {/* Market Conditions */}
-              <Text style={styles.sectionTitle}>Market Conditions</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={styles.sectionTitle}>Market Conditions</Text>
+                <InfoButton termKey="volatility" size={18} />
+              </View>
               <View style={styles.conditionsGrid}>
                 <View style={styles.conditionCard}>
                   <Ionicons name="bar-chart" size={24} color="#3b82f6" />
                   <Text style={styles.conditionValue}>{formatVolume(data?.market_conditions?.total_volume_usd || 0)}</Text>
-                  <Text style={styles.conditionLabel}>24h Volume</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.conditionLabel}>24h Volume</Text>
+                    <InfoButton termKey="volume_24h" size={13} />
+                  </View>
                 </View>
                 <View style={styles.conditionCard}>
                   <Ionicons name="pulse" size={24} color="#f59e0b" />
                   <Text style={styles.conditionValue}>{data?.market_conditions?.avg_volatility?.toFixed(1)}%</Text>
-                  <Text style={styles.conditionLabel}>Avg Volatility</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.conditionLabel}>Avg Volatility</Text>
+                    <InfoButton termKey="volatility" size={13} />
+                  </View>
                 </View>
                 <View style={styles.conditionCard}>
                   <Ionicons name="water" size={24} color="#10b981" />
                   <Text style={styles.conditionValue}>{data?.market_conditions?.liquid_coins_count}</Text>
-                  <Text style={styles.conditionLabel}>Liquid Coins</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={styles.conditionLabel}>Liquid Coins</Text>
+                    <InfoButton termKey="liquidity" size={13} />
+                  </View>
                 </View>
                 <View style={styles.conditionCard}>
                   <Ionicons name="time" size={24} color={data?.market_conditions?.is_good_hours ? '#10b981' : '#ef4444'} />
@@ -591,19 +685,28 @@ export default function DayTradingScreen() {
                   {selectedCoin === coin.symbol && (
                     <View style={styles.coinDetails}>
                       <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Entry Range</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={styles.detailLabel}>Entry Range</Text>
+                          <InfoButton termKey="entry_range" size={12} />
+                        </View>
                         <Text style={styles.detailValue}>
                           {formatCurrency(coin.entry_range.low)} - {formatCurrency(coin.entry_range.high)}
                         </Text>
                       </View>
                       <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Stop Loss</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={styles.detailLabel}>Stop Loss</Text>
+                          <InfoButton termKey="stop_loss" size={12} />
+                        </View>
                         <Text style={[styles.detailValue, { color: '#ef4444' }]}>
                           {formatCurrency(coin.stop_loss)} (-{coin.stop_loss_pct}%)
                         </Text>
                       </View>
                       <View style={styles.detailRow}>
-                        <Text style={styles.detailLabel}>Take Profit (1:2)</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={styles.detailLabel}>Take Profit (1:2)</Text>
+                          <InfoButton termKey="take_profit" size={12} />
+                        </View>
                         <Text style={[styles.detailValue, { color: '#10b981' }]}>
                           {formatCurrency(coin.take_profit.tp2_1to2 ?? coin.take_profit.tp2_1to1_5 ?? 0)}
                         </Text>
@@ -665,6 +768,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#9ca3af',
     marginTop: 2,
+  },
+  glossaryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f59e0b15',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#f59e0b30',
+  },
+  glossaryButtonText: {
+    color: '#f59e0b',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   loadingContainer: {
     flex: 1,

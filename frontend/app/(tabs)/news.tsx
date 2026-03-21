@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { InfoButton, GlossaryScreen } from './FinanceTooltip';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -37,9 +38,11 @@ interface LeaderStatement {
   sentiment_score: number;
   ai_analysis: string;
   impact_history: {
-    '1h_change': number;
-    '24h_change': number;
-    '7d_change': number;
+    tracked?: boolean;
+    note?: string;
+    '1h_change': number | null;
+    '24h_change': number | null;
+    '7d_change': number | null;
   };
 }
 
@@ -70,6 +73,7 @@ export default function NewsScreen() {
   const [expandedNews, setExpandedNews] = useState<string | null>(null);
   const [expandedLeader, setExpandedLeader] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [showGlossary, setShowGlossary] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'news') {
@@ -260,35 +264,47 @@ export default function NewsScreen() {
 
         {/* Impact History */}
         <View style={styles.impactHistory}>
-          <Text style={styles.impactHistoryTitle}>Price Impact After Statement:</Text>
-          <View style={styles.impactRow}>
-            <View style={styles.impactItem}>
-              <Text style={styles.impactLabel}>1h</Text>
-              <Text style={[
-                styles.impactValue,
-                { color: stmt.impact_history['1h_change'] >= 0 ? '#10b981' : '#ef4444' }
-              ]}>
-                {stmt.impact_history['1h_change'] >= 0 ? '+' : ''}{stmt.impact_history['1h_change'].toFixed(2)}%
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={styles.impactHistoryTitle}>Price Impact After Statement:</Text>
+            <InfoButton termKey="change_24h" size={12} />
+          </View>
+          {stmt.impact_history?.tracked === false ? (
+            <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+              <Text style={{ color: '#6b7280', fontSize: 12, textAlign: 'center' }}>
+                Impact tracking coming soon. The app needs to collect data over time to show real price changes after statements.
               </Text>
             </View>
-            <View style={styles.impactItem}>
-              <Text style={styles.impactLabel}>24h</Text>
-              <Text style={[
-                styles.impactValue,
-                { color: stmt.impact_history['24h_change'] >= 0 ? '#10b981' : '#ef4444' }
-              ]}>
-                {stmt.impact_history['24h_change'] >= 0 ? '+' : ''}{stmt.impact_history['24h_change'].toFixed(2)}%
-              </Text>
+          ) : (
+            <View style={styles.impactRow}>
+              <View style={styles.impactItem}>
+                <Text style={styles.impactLabel}>1h</Text>
+                <Text style={[
+                  styles.impactValue,
+                  { color: (stmt.impact_history?.['1h_change'] ?? 0) >= 0 ? '#10b981' : '#ef4444' }
+                ]}>
+                  {(stmt.impact_history?.['1h_change'] ?? 0) >= 0 ? '+' : ''}{(stmt.impact_history?.['1h_change'] ?? 0).toFixed(2)}%
+                </Text>
+              </View>
+              <View style={styles.impactItem}>
+                <Text style={styles.impactLabel}>24h</Text>
+                <Text style={[
+                  styles.impactValue,
+                  { color: (stmt.impact_history?.['24h_change'] ?? 0) >= 0 ? '#10b981' : '#ef4444' }
+                ]}>
+                  {(stmt.impact_history?.['24h_change'] ?? 0) >= 0 ? '+' : ''}{(stmt.impact_history?.['24h_change'] ?? 0).toFixed(2)}%
+                </Text>
+              </View>
+              <View style={styles.impactItem}>
+                <Text style={styles.impactLabel}>7d</Text>
+                <Text style={[
+                  styles.impactValue,
+                  { color: (stmt.impact_history?.['7d_change'] ?? 0) >= 0 ? '#10b981' : '#ef4444' }
+                ]}>
+                  {(stmt.impact_history?.['7d_change'] ?? 0) >= 0 ? '+' : ''}{(stmt.impact_history?.['7d_change'] ?? 0).toFixed(2)}%
+                </Text>
+              </View>
             </View>
-            <View style={styles.impactItem}>
-              <Text style={styles.impactLabel}>7d</Text>
-              <Text style={[
-                styles.impactValue,
-                { color: stmt.impact_history['7d_change'] >= 0 ? '#10b981' : '#ef4444' }
-              ]}>
-                {stmt.impact_history['7d_change'] >= 0 ? '+' : ''}{stmt.impact_history['7d_change'].toFixed(2)}%
-              </Text>
-            </View>
+          )}
           </View>
         </View>
 
@@ -322,14 +338,26 @@ export default function NewsScreen() {
             <Text style={styles.headerTitle}>Market News</Text>
             <Text style={styles.headerSubtitle}>AI-analyzed insights for Indian investors</Text>
           </View>
-          <TouchableOpacity 
-            style={[styles.editButton, editMode && styles.editButtonActive]}
-            onPress={() => setEditMode(!editMode)}
-          >
-            <Ionicons name="pencil" size={18} color={editMode ? '#fff' : '#9ca3af'} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity 
+              style={styles.learnButton}
+              onPress={() => setShowGlossary(true)}
+            >
+              <Ionicons name="book-outline" size={16} color="#f59e0b" />
+              <Text style={styles.learnButtonText}>Learn</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.editButton, editMode && styles.editButtonActive]}
+              onPress={() => setEditMode(!editMode)}
+            >
+              <Ionicons name="pencil" size={18} color={editMode ? '#fff' : '#9ca3af'} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
+
+      {/* Finance Glossary Modal */}
+      <GlossaryScreen visible={showGlossary} onClose={() => setShowGlossary(false)} />
 
       {/* Main Tabs */}
       <View style={styles.mainTabs}>
@@ -500,6 +528,22 @@ const styles = StyleSheet.create({
   },
   editButtonActive: {
     backgroundColor: '#6366f1',
+  },
+  learnButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f59e0b15',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#f59e0b30',
+    gap: 4,
+  },
+  learnButtonText: {
+    color: '#f59e0b',
+    fontSize: 12,
+    fontWeight: '600',
   },
   mainTabs: {
     flexDirection: 'row',

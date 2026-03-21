@@ -79,7 +79,7 @@ USD_TO_INR = 83.50
 # ==================== CACHING SYSTEM ====================
 # Cache for personalized advice to ensure consistency
 PERSONALIZED_ADVICE_CACHE = {}
-CACHE_TTL_SECONDS = 300  # 5 minute cache for same inputs
+CACHE_TTL_SECONDS = 900  # 15 minute cache - ensures consistent advice when user refreshes
 
 def get_cache_key(capital: float, risk_profile: str) -> str:
     """Generate cache key based on amount (rounded) and hour"""
@@ -91,7 +91,7 @@ def get_cached_advice(cache_key: str) -> Optional[Dict]:
     """Get cached advice if still valid"""
     if cache_key in PERSONALIZED_ADVICE_CACHE:
         cached_time, cached_data = PERSONALIZED_ADVICE_CACHE[cache_key]
-        if (datetime.now() - cached_time).seconds < CACHE_TTL_SECONDS:
+        if (datetime.now() - cached_time).total_seconds() < CACHE_TTL_SECONDS:
             return cached_data
         else:
             del PERSONALIZED_ADVICE_CACHE[cache_key]
@@ -104,7 +104,7 @@ def set_cached_advice(cache_key: str, data: Dict):
     for key in list(PERSONALIZED_ADVICE_CACHE.keys()):
         if key != cache_key:
             cached_time, _ = PERSONALIZED_ADVICE_CACHE[key]
-            if (datetime.now() - cached_time).seconds > CACHE_TTL_SECONDS * 2:
+            if (datetime.now() - cached_time).total_seconds() > CACHE_TTL_SECONDS * 2:
                 del PERSONALIZED_ADVICE_CACHE[key]
 
 # Risk tolerance multipliers
@@ -245,7 +245,7 @@ class CryptoDataService:
     def __init__(self):
         self.base_url = "https://api.coingecko.com/api/v3"
         self.cache = {}
-        self.cache_ttl = 30  # 30 seconds cache for fresher data
+        self.cache_ttl = 180  # 3 minutes - prevents CoinGecko rate limiting (was 30s, caused fallback flickering)
         self.last_usd_inr_rate = 83.50  # Fallback USD/INR rate
         
     async def get_usd_inr_rate(self) -> float:
@@ -272,7 +272,7 @@ class CryptoDataService:
         cache_key = "crypto_prices"
         if cache_key in self.cache:
             cached_time, cached_data = self.cache[cache_key]
-            if (datetime.now() - cached_time).seconds < self.cache_ttl:
+            if (datetime.now() - cached_time).total_seconds() < self.cache_ttl:
                 return cached_data
         
         try:
@@ -513,14 +513,14 @@ class StockDataService:
             "SBILIFE.NS", "SHREECEM.NS", "TATACONSUM.NS", "UPL.NS", "VEDL.NS"
         ]
         self.cache = {}
-        self.cache_ttl = 300  # 5 minutes
+        self.cache_ttl = 600  # 10 minutes - stocks update less frequently than crypto
         
     async def get_nifty50(self) -> Dict:
         """Get Nifty 50 stock prices"""
         cache_key = "nifty50"
         if cache_key in self.cache:
             cached_time, cached_data = self.cache[cache_key]
-            if (datetime.now() - cached_time).seconds < self.cache_ttl:
+            if (datetime.now() - cached_time).total_seconds() < self.cache_ttl:
                 return cached_data
         
         try:
@@ -1063,117 +1063,93 @@ Format with clear sections. Be direct and analytical. No fluff."""
             return self._generate_mock_analysis(context)
     
     def _generate_mock_analysis(self, context: str = "", news_title: str = "", news_summary: str = "") -> str:
-        """Generate unique mock analysis based on specific news content"""
+        """Generate honest analysis based on keyword sentiment. No fake probabilities."""
         
-        # If we have specific news content, generate unique analysis
         if news_title:
-            # Determine sentiment and action based on keywords
             title_lower = news_title.lower()
             summary_lower = (news_summary or "").lower()
             combined = title_lower + " " + summary_lower
             
-            # Bullish keywords
-            bullish_words = ["surge", "high", "rally", "inflows", "growth", "bullish", "boost", "record", "soar", "gain"]
-            bearish_words = ["crash", "fall", "drop", "decline", "bearish", "fear", "concern", "risk", "tension", "cut"]
-            crypto_words = ["bitcoin", "btc", "ethereum", "eth", "crypto", "blockchain", "defi", "nft"]
-            stock_words = ["nifty", "sensex", "equity", "stock", "fii", "sebi", "share"]
+            # Keyword-based sentiment detection
+            bullish_words = ["surge", "high", "rally", "inflows", "growth", "bullish", "boost", "record", "soar", "gain", "rise", "up", "positive"]
+            bearish_words = ["crash", "fall", "drop", "decline", "bearish", "fear", "concern", "risk", "tension", "cut", "down", "negative", "slump"]
+            crypto_words = ["bitcoin", "btc", "ethereum", "eth", "crypto", "blockchain", "defi", "nft", "token"]
+            stock_words = ["nifty", "sensex", "equity", "stock", "fii", "sebi", "share", "bse", "nse"]
             
-            is_bullish = any(w in combined for w in bullish_words)
-            is_bearish = any(w in combined for w in bearish_words)
+            bullish_count = sum(1 for w in bullish_words if w in combined)
+            bearish_count = sum(1 for w in bearish_words if w in combined)
             is_crypto = any(w in combined for w in crypto_words)
             is_stock = any(w in combined for w in stock_words)
             
-            # Generate unique probability estimates based on content
-            if is_bullish:
-                bull_prob = random.randint(50, 70)
-                bear_prob = random.randint(10, 25)
-            elif is_bearish:
-                bull_prob = random.randint(20, 35)
-                bear_prob = random.randint(40, 60)
+            # Determine sentiment honestly based on keyword density
+            if bullish_count > bearish_count + 1:
+                sentiment = "positive"
+                sentiment_detail = "The language in this news leans positive, with multiple optimistic signals."
+                outlook = "If this sentiment holds, prices of related assets could move upward in the short term. However, positive news is sometimes already reflected in the price by the time you read it."
+                action = "If you were already planning to buy, this news supports that direction. If not, don't rush in based on one headline. Wait and watch for 24 hours."
+            elif bearish_count > bullish_count + 1:
+                sentiment = "negative"
+                sentiment_detail = "The language in this news leans negative, with cautionary signals."
+                outlook = "Negative news often causes a quick price drop followed by a partial recovery. The initial reaction is usually the strongest."
+                action = "Avoid making new purchases right now. If you already hold these assets, check your stop-loss levels. Do not panic sell based on one headline."
             else:
-                bull_prob = random.randint(35, 50)
-                bear_prob = random.randint(25, 40)
+                sentiment = "mixed"
+                sentiment_detail = "This news contains both positive and negative elements. The market impact is unclear."
+                outlook = "When news is mixed, markets tend to stay range-bound. There may not be a clear trading opportunity here."
+                action = "No immediate action needed. Watch how the market reacts over the next 24-48 hours before making any decisions."
             
-            neutral_prob = 100 - bull_prob - bear_prob
-            
-            # Generate unique price impact estimate
-            if is_bullish:
-                impact = f"+{random.randint(3, 12)}% to +{random.randint(15, 25)}%"
-            elif is_bearish:
-                impact = f"-{random.randint(5, 15)}% to -{random.randint(2, 8)}%"
-            else:
-                impact = f"-{random.randint(2, 5)}% to +{random.randint(3, 8)}%"
-            
-            # Asset-specific recommendation
+            # Asset-specific context
             if is_crypto:
-                asset_rec = "BTC and ETH likely most affected. Consider SOL for higher beta exposure."
+                asset_note = "This primarily affects the crypto market. Bitcoin and Ethereum typically react first, with smaller coins following. Remember: 30% VDA tax applies to any profits in India."
             elif is_stock:
-                asset_rec = "Nifty 50 constituents, especially banking and IT sectors, most impacted."
+                asset_note = "This primarily affects Indian stock markets. Banking and IT sectors in the Nifty 50 are usually most sensitive to such news."
             else:
-                asset_rec = "Broad market impact expected across both crypto and equity."
+                asset_note = "This could affect both crypto and stock markets. Watch for how major indices (Nifty, BTC) react before trading smaller assets."
             
-            # Determine action
-            if is_bullish and bull_prob > 55:
-                action = "CONSIDER BUYING on dips. Set stop-loss at 5-7% below entry."
-            elif is_bearish and bear_prob > 45:
-                action = "REDUCE EXPOSURE or wait for stabilization. Avoid catching falling knife."
-            else:
-                action = "HOLD current positions. Monitor for clearer signals before acting."
-            
-            return strip_markdown(f"""ANALYSIS OF: {news_title[:80]}...
+            return strip_markdown(f"""ANALYSIS: {news_title[:80]}
 
-CORE ASSESSMENT:
-This news event has significant implications for Indian investors. The immediate market reaction suggests {bull_prob}% probability of positive outcome.
+WHAT THIS MEANS:
+{sentiment_detail}
 
-KEY OBSERVATIONS:
-1. {news_summary[:150] if news_summary else 'Market sentiment shifting based on this development.'}
-2. {asset_rec}
-3. Time horizon: Short-term impact (1-7 days) most pronounced.
+{news_summary[:200] if news_summary else 'Details are still emerging. Wait for more information before acting.'}
 
-PROBABILITY FRAMEWORK:
-Bullish scenario ({bull_prob}%): Price impact of {impact} within 48-72 hours
-Neutral scenario ({neutral_prob}%): Consolidation, limited movement
-Bearish scenario ({bear_prob}%): Reversal if broader macro deteriorates
+MARKET OUTLOOK:
+Sentiment: {sentiment.upper()}
+{outlook}
 
-COUNTERPOINT:
-Markets often overreact initially. Wait for confirmation before large positions. Consider: Could this be priced in already? What is the second-order effect?
+WHICH ASSETS ARE AFFECTED:
+{asset_note}
 
-RISK FACTORS:
-Global macro uncertainty (Fed, geopolitics)
-India-specific: INR volatility, regulatory changes
-Tax impact: 30% VDA tax on crypto, 10% LTCG on stocks above Rs 1L
+IMPORTANT CONTEXT:
+News often causes a short-term price reaction (hours to days), but the long-term direction depends on fundamentals, not headlines. Markets can move opposite to what the news suggests.
 
-RECOMMENDED ACTION: {action}
+WHAT TO DO:
+{action}
+
+ALWAYS REMEMBER:
+Never invest based on a single news item. Use stop-losses to protect your capital. If you're unsure, doing nothing is a perfectly valid strategy.
 
 {DISCLAIMER}""")
         
-        # Default generic analysis if no specific news
-        return strip_markdown(f"""MARKET ANALYSIS
+        # Default generic analysis when no specific news is provided
+        return strip_markdown(f"""MARKET OVERVIEW
 
-CORE ASSESSMENT:
-Based on current market data, we observe mixed signals requiring careful interpretation.
+CURRENT SITUATION:
+The market is showing mixed signals. Some indicators point up, others point down. This is normal and happens most days.
 
-ASSUMPTION CHECK:
-Common belief: This trend will continue BUT historical data shows mean reversion occurs 70% of time within 2 weeks
-Liquidity appears strong HOWEVER this could indicate distribution rather than accumulation
+WHAT THIS MEANS FOR YOU:
+When signals are mixed, there is no clear advantage to buying or selling right now. Professional traders often sit out during mixed conditions rather than forcing trades.
 
-PROBABILITY FRAMEWORK:
-Bullish scenario (40%): Continuation with 15-20% upside
-Neutral scenario (35%): Consolidation in current range
-Bearish scenario (25%): Correction of 10-15%
+THINGS TO WATCH:
+Look for RSI moving below 30 (potential buying opportunity) or above 70 (potential time to take profits). Check if MACD trend is turning bullish (upward momentum building) or bearish (momentum fading).
 
-RISK FACTORS:
-1. Global macro uncertainty (Fed policy, geopolitical tensions)
-2. India-specific: INR volatility, regulatory changes
-3. Tax impact: 30% VDA tax significantly reduces net returns
+KEY RISKS FOR INDIAN INVESTORS:
+Crypto profits are taxed at 30% (VDA tax) with no loss offset allowed.
+Stock LTCG above Rs 1 lakh taxed at 10% (if held over 1 year).
+INR/USD fluctuations affect crypto returns since global prices are in USD.
 
-COUNTERPOINT:
-While momentum appears positive, elevated volume could indicate late-stage accumulation before distribution. Consider: Is this genuine demand or manufactured liquidity?
-
-ALTERNATIVE ACTIONS:
-Option A: Enter with reduced position size (50% of planned)
-Option B: Wait for pullback to support levels
-Option C: Hedge with inverse positions
+HONEST ADVICE:
+If you're new to trading, start by watching the market for a few days without putting in money. Learn what makes prices move. Paper trade (practice with virtual money) before using real capital. Most day traders lose money — there's no shame in being cautious.
 
 {DISCLAIMER}""")
 
@@ -1360,7 +1336,17 @@ async def logout(request: Request, response: Response):
 async def get_crypto_prices():
     """Get real-time crypto prices from CoinGecko"""
     prices = await crypto_service.get_prices()
-    return {"data": prices, "currency": "INR", "source": "coingecko", "disclaimer": DISCLAIMER}
+    # Detect if we're serving fallback data
+    any_source = next(iter(prices.values()), {}).get("source", "") if prices else ""
+    is_live = "Fallback" not in any_source
+    return {
+        "data": prices, 
+        "currency": "INR", 
+        "source": "coingecko", 
+        "data_quality": "live" if is_live else "estimated",
+        "data_quality_note": "" if is_live else "Showing estimated prices. Live data temporarily unavailable. Prices may differ from actual market rates.",
+        "disclaimer": DISCLAIMER
+    }
 
 @api_router.get("/crypto/{symbol}")
 async def get_crypto_detail(symbol: str):
@@ -1649,9 +1635,11 @@ RECOMMENDED ACTION: Watch for market reaction. No immediate action required.
             "sentiment_score": stmt.get("sentiment_score", 0.0),
             "ai_analysis": analysis,
             "impact_history": {
-                "1h_change": round(random.uniform(-3, 5), 2),
-                "24h_change": round(random.uniform(-8, 12), 2),
-                "7d_change": round(random.uniform(-15, 25), 2)
+                "tracked": False,
+                "note": "Price impact tracking will be available once we collect enough data. Check back soon.",
+                "1h_change": None,
+                "24h_change": None,
+                "7d_change": None
             }
         })
     
@@ -3104,6 +3092,346 @@ async def get_education_tips():
             {"id": "position_sizing", "title": "Position Sizing", "content": "Never risk >2% of capital on single trade. Max 5% per position. Aggressive? Still cap at 10%.", "category": "strategy"}
         ],
         "disclaimer": DISCLAIMER
+    }
+
+# ==================== FINANCE GLOSSARY (Beginner-Friendly) ====================
+
+FINANCE_GLOSSARY = {
+    # ---- Price & Market Terms ----
+    "price_inr": {
+        "term": "Price (INR)",
+        "short": "What 1 unit of this coin/stock costs right now in Indian Rupees.",
+        "detailed": "This is the current market price. It changes every second based on how many people are buying vs selling. Think of it like the price tag on a product that keeps updating based on demand.",
+        "example": "If BTC price is ₹66,00,000, that means buying 1 full Bitcoin costs ₹66 lakh. But you can buy fractions — even ₹100 worth.",
+        "category": "basics"
+    },
+    "market_cap": {
+        "term": "Market Cap",
+        "short": "The total value of ALL coins/shares that exist. Bigger = generally safer.",
+        "detailed": "Market Cap = Price x Total number of coins/shares in circulation. It tells you how 'big' a company or cryptocurrency is. A ₹10 lakh crore market cap means that's the total value of the entire project. Bigger market cap usually means more stability, but not always more profit potential.",
+        "example": "If a coin costs ₹100 and there are 1 crore coins, market cap = ₹100 crore. Bitcoin's market cap is the largest in crypto — that's why it's considered the 'safest' crypto (though still risky).",
+        "category": "basics"
+    },
+    "volume_24h": {
+        "term": "24h Volume",
+        "short": "How much money was traded in the last 24 hours. High volume = easier to buy/sell.",
+        "detailed": "Volume tells you how active a market is. High volume means lots of buyers and sellers, so you can easily enter or exit a trade without the price moving against you. Low volume is dangerous — you might not find a buyer when you want to sell.",
+        "example": "If 24h volume is $2 Billion, that means $2B worth of that coin changed hands today. Above $500M is generally considered liquid enough for safe trading.",
+        "category": "basics"
+    },
+    "change_24h": {
+        "term": "24h Change",
+        "short": "How much the price went up or down in the last 24 hours, shown as a percentage.",
+        "detailed": "A +5% change means the price is 5% higher than it was exactly 24 hours ago. A -3% means it dropped 3%. In crypto, daily swings of 3-5% are normal. In stocks, 1-2% daily moves are typical. Anything above 10% in a day is extreme.",
+        "example": "+2.5% on a ₹66L Bitcoin means it went up roughly ₹1.65 lakh in one day.",
+        "category": "basics"
+    },
+    "volatility": {
+        "term": "Volatility",
+        "short": "How wildly the price swings up and down. High volatility = bigger potential gains AND losses.",
+        "detailed": "Volatility measures how much a price moves in a given period. A coin that goes up 10% one day and down 8% the next is 'highly volatile.' Volatility is not good or bad — it's a measure of uncertainty. Day traders love volatility (more opportunities), while long-term investors prefer stability.",
+        "example": "Bitcoin might move 3-5% daily (high volatility). A bank stock like HDFC might move 0.5-1% daily (low volatility). Your savings account has zero volatility.",
+        "category": "basics"
+    },
+    # ---- Technical Indicators ----
+    "rsi": {
+        "term": "RSI (Relative Strength Index)",
+        "short": "A score from 0-100 that tells you if something is 'too expensive' (above 70) or 'on sale' (below 30).",
+        "detailed": "RSI measures how fast the price has been going up or down over the last 14 days. Think of it like a speedometer for price movement:\n\n• Below 30: The price has been falling a lot recently. It MIGHT be 'on sale' and could bounce back up. This is called 'oversold.'\n• 30-70: Normal range. No extreme signal.\n• Above 70: The price has been rising a lot recently. It MIGHT be 'too expensive' and could pull back. This is called 'overbought.'\n\nIMPORTANT: RSI is not a crystal ball. A coin can stay 'overbought' for weeks if there's genuine demand.",
+        "example": "If Bitcoin's RSI is 72, it means BTC has been going up fast recently. Some traders see this as a warning to not buy more right now and wait for a dip. But it doesn't guarantee a dip will happen.",
+        "category": "technical"
+    },
+    "macd": {
+        "term": "MACD",
+        "short": "Shows whether the price trend is gaining or losing strength. 'Bullish' = upward momentum, 'Bearish' = downward momentum.",
+        "detailed": "MACD compares two moving averages (basically, two different 'average prices over time'). When the short-term average crosses ABOVE the long-term average, it's a 'bullish crossover' — the price trend is accelerating upward. When it crosses BELOW, it's a 'bearish crossover' — the trend is weakening.\n\nThe 'histogram' shows the gap between these averages. Positive and growing = strong uptrend. Negative and growing = strong downtrend.",
+        "example": "If MACD trend shows 'bullish' with a positive histogram of 245, it means the upward price momentum is strong. But this can change within hours.",
+        "category": "technical"
+    },
+    "bollinger_bands": {
+        "term": "Bollinger Bands",
+        "short": "Price boundaries that show the 'normal range' for a coin. When price touches the edges, a reversal might be coming.",
+        "detailed": "Imagine drawing a channel around the price chart:\n\n• Upper Band: If price touches this, the coin might be temporarily overpriced\n• Middle Band: The average price over 20 periods\n• Lower Band: If price touches this, the coin might be temporarily underpriced\n\nWhen the bands get very narrow (called a 'squeeze'), it often means a big price move is coming — but it does not tell you which direction.",
+        "example": "If BTC price is near the upper Bollinger Band at ₹68L while the middle is at ₹64L, it suggests BTC is trading above its recent average and might pull back toward ₹64L.",
+        "category": "technical"
+    },
+    "atr": {
+        "term": "ATR (Average True Range)",
+        "short": "How much the price typically moves in a single day, in rupees. Helps you set realistic stop-losses.",
+        "detailed": "ATR tells you the average daily price swing over the last 14 days. If BTC's ATR is ₹2,00,000, that means on a typical day, BTC moves about ₹2 lakh up or down. This is useful for setting stop-losses — you don't want your stop-loss tighter than the normal daily swing, or you'll get stopped out by normal market noise.",
+        "example": "If ATR is ₹2L and you set a stop-loss at ₹50,000 below your buy price, you'll likely get stopped out by normal price movements even if the overall trend is in your favor.",
+        "category": "technical"
+    },
+    # ---- Trading Terms ----
+    "stop_loss": {
+        "term": "Stop Loss",
+        "short": "An automatic 'sell' order that protects you from losing too much. If the price drops to this level, your position is sold automatically.",
+        "detailed": "A stop loss is your safety net. You set it BELOW your buy price. If the price falls to that level, your coins/stocks are automatically sold to prevent further losses.\n\nExample: You buy BTC at ₹66L. You set stop-loss at ₹63L (about 4.5% below). If BTC drops to ₹63L, it auto-sells. You lose ₹3L instead of potentially ₹10L+ if it keeps falling.\n\nGolden rule: ALWAYS set a stop-loss. The #1 reason retail traders lose money is not using stop-losses and hoping the price will recover.",
+        "example": "Buy at ₹1,000. Stop loss at ₹930 (-7%). Worst case: you lose ₹70 per unit. Without a stop loss? You could lose ₹200, ₹500, or everything.",
+        "category": "trading"
+    },
+    "take_profit": {
+        "term": "Take Profit (TP)",
+        "short": "The price where you plan to sell and lock in your gains. Without this, greed can turn profits into losses.",
+        "detailed": "Take Profit is the opposite of stop-loss. You set it ABOVE your buy price. When the price reaches your target, you sell (partially or fully) and pocket the profit.\n\nMany traders set multiple take-profit levels:\n• TP1: Sell 50% of your position (lock in some profit)\n• TP2: Sell 30% more (let it ride a bit)\n• TP3: Sell the remaining 20% (catch the full move if lucky)\n\nThis way you don't miss out if the price keeps rising, but you also secure gains along the way.",
+        "example": "Buy BTC at ₹66L. TP1 at ₹68L (sell half), TP2 at ₹70L (sell more), TP3 at ₹73L (sell rest). If it only reaches ₹68L and reverses, you still made profit on half your position.",
+        "category": "trading"
+    },
+    "entry_range": {
+        "term": "Entry Range",
+        "short": "The price zone where the app suggests you should buy. Buying within this range gives you a good starting position.",
+        "detailed": "Rather than saying 'buy at exactly ₹66,00,000', the app gives you a range like ₹65,67,000 - ₹66,33,000. This is because:\n1. Prices move every second — by the time you place an order, the exact price may have changed\n2. A small range around the current price is still a 'good entry'\n3. If the price moves outside this range, the risk/reward calculation changes and you might want to wait",
+        "example": "Entry range ₹65.67L - ₹66.33L for BTC means: if BTC is within this range, it's a reasonable time to buy according to the analysis. If it's already at ₹68L, you missed this entry — wait for the next opportunity.",
+        "category": "trading"
+    },
+    "position_size": {
+        "term": "Position Size",
+        "short": "How much of your total money you put into a single trade. Smaller = safer.",
+        "detailed": "Position size is the most important risk management tool. Even if you're very confident in a trade, NEVER put all your money in one position.\n\nGeneral rules:\n• Conservative: 1-2% of your total capital per trade\n• Moderate: 3-5% per trade\n• Aggressive: 5-10% per trade (NOT recommended for beginners)\n\nWhy? Even the best traders are wrong 40-50% of the time. If you put 50% of your money in one trade and it fails, you need a 100% gain on the remaining money just to break even.",
+        "example": "If you have ₹1,00,000 total and use 5% position sizing, each trade uses ₹5,000. Even if 5 trades fail in a row (losing ₹25,000), you still have ₹75,000 to recover. If you had put ₹50,000 in one trade, a 50% loss leaves you with only ₹75,000 AND no diversification.",
+        "category": "trading"
+    },
+    "risk_reward_ratio": {
+        "term": "Risk-Reward Ratio (RR)",
+        "short": "Compares how much you could lose vs how much you could gain. 1:2 means you risk ₹1 to potentially make ₹2.",
+        "detailed": "Before entering any trade, compare your potential loss (distance to stop-loss) with your potential gain (distance to take-profit).\n\n• 1:1 = Risk ₹1,000 to make ₹1,000. Barely worth it.\n• 1:2 = Risk ₹1,000 to make ₹2,000. Good.\n• 1:3 = Risk ₹1,000 to make ₹3,000. Great.\n\nNever take trades below 1:1 risk-reward. Even with a 50% win rate, a 1:2 ratio means you make money over time: Win 5 trades (₹10,000) and lose 5 trades (₹5,000) = net +₹5,000.",
+        "example": "TP1 labeled '1:1' means your take-profit target is the same distance from entry as your stop-loss. TP2 '1:2' means the profit target is twice the distance of your stop-loss.",
+        "category": "trading"
+    },
+    "signal_strength": {
+        "term": "Signal Strength",
+        "short": "How convincing the trading opportunity looks. 'Strong' = multiple indicators agree. 'Weak' = risky, fewer indicators support it.",
+        "detailed": "'Strong' signal means several different analyses (RSI, MACD, volume, price action) all point in the same direction. 'Moderate' means some indicators agree but not all. 'Weak' means only one or two indicators suggest a trade — higher risk.\n\nEven 'strong' signals fail 30-40% of the time. There is no guarantee in trading.",
+        "example": "Strong signal: RSI is oversold (below 30) + MACD just turned bullish + volume is increasing + price bounced off support. Multiple things agreeing = stronger signal.",
+        "category": "trading"
+    },
+    # ---- Market Concepts ----
+    "bullish": {
+        "term": "Bullish / Bull Market",
+        "short": "Prices are going UP or expected to go up. Think of a bull thrusting its horns upward.",
+        "detailed": "When someone says they're 'bullish on BTC', they expect BTC price to rise. A 'bull market' is a sustained period of rising prices (months or years). The name comes from how a bull attacks — thrusting its horns UP.\n\nBullish indicators: Rising prices, high buying volume, positive news, RSI trending up, MACD bullish crossover.",
+        "example": "If BTC went from ₹50L to ₹66L over 3 months with strong buying volume, that's a bullish trend.",
+        "category": "concepts"
+    },
+    "bearish": {
+        "term": "Bearish / Bear Market",
+        "short": "Prices are going DOWN or expected to drop. Think of a bear swiping its paw downward.",
+        "detailed": "The opposite of bullish. When someone is 'bearish on ETH', they expect ETH price to fall. A 'bear market' is a sustained period of declining prices. The name comes from how a bear attacks — swiping its paw DOWN.\n\nBearish indicators: Falling prices, high selling volume, negative news, RSI trending down, MACD bearish crossover.",
+        "example": "If the crypto market dropped 50% from its peak over 6 months, that's a bear market. The 2022 crypto crash was a famous bear market.",
+        "category": "concepts"
+    },
+    "support_resistance": {
+        "term": "Support and Resistance",
+        "short": "Support = price floor (tends to bounce up from here). Resistance = price ceiling (tends to bounce down from here).",
+        "detailed": "These are price levels where the market has historically changed direction.\n\n• Support: A price level where buyers tend to step in and buy, preventing the price from falling further. Think of it as a floor.\n• Resistance: A price level where sellers tend to step in and sell, preventing the price from rising further. Think of it as a ceiling.\n\nWhen support 'breaks' (price falls below it), it often becomes the new resistance, and vice versa.",
+        "example": "If BTC bounced off ₹60L three times in the past month, ₹60L is a strong support level. If you're buying, placing a stop-loss just below ₹60L makes sense — if it breaks that level, the analysis was wrong.",
+        "category": "concepts"
+    },
+    "liquidity": {
+        "term": "Liquidity",
+        "short": "How easily you can buy or sell without moving the price. High liquidity = safe to trade. Low liquidity = dangerous.",
+        "detailed": "A 'liquid' market has lots of buyers and sellers at every price level. You can buy or sell large amounts without the price moving against you.\n\nAn 'illiquid' market has few participants. If you try to sell a large position, there might not be enough buyers, and the price drops significantly before your order fills.\n\nBTC and ETH are highly liquid. Small altcoins can be very illiquid — you might buy easily but struggle to sell when you need to.",
+        "example": "Trying to sell ₹10L worth of BTC? Easy, happens instantly. Trying to sell ₹10L worth of a tiny altcoin with ₹50L daily volume? Your sell order alone could crash the price 20%.",
+        "category": "concepts"
+    },
+    # ---- Indian Tax Terms ----
+    "vda_tax": {
+        "term": "VDA Tax (30% Crypto Tax)",
+        "short": "India charges a flat 30% tax on ALL cryptocurrency profits. No deductions, no offsets. This is the law.",
+        "detailed": "VDA = Virtual Digital Asset (government term for crypto). Key rules:\n\n1. 30% FLAT TAX on all gains — no matter how small or how long you held\n2. 1% TDS (Tax Deducted at Source) on every transaction above ₹10,000\n3. You CANNOT offset crypto losses against any other income or even other crypto gains\n4. You CANNOT deduct expenses (except the cost of buying the crypto)\n\nThis means: If you made ₹1,00,000 profit on Bitcoin but lost ₹80,000 on Ethereum, you still owe 30% tax on the ₹1,00,000 Bitcoin profit = ₹30,000. The Ethereum loss doesn't help you.\n\nThis drastically affects day trading profitability. You need at least 43% gross gains to actually net 30% after tax.",
+        "example": "Buy BTC at ₹60L, sell at ₹66L. Profit: ₹6L. Tax: ₹6L x 30% = ₹1.8L. TDS: ₹66L x 1% = ₹66,000 (adjustable against tax). Net profit after tax: roughly ₹4.2L on a ₹60L investment.",
+        "category": "tax"
+    },
+    "ltcg": {
+        "term": "LTCG (Long Term Capital Gains)",
+        "short": "Tax on stock market profits when you hold for more than 1 year. Only 10% tax, and first ₹1 lakh is tax-free.",
+        "detailed": "If you buy stocks and hold them for over 1 year before selling:\n• First ₹1,00,000 of profit in a financial year: NO TAX\n• Profit above ₹1,00,000: 10% tax\n\nThis is much better than crypto tax. It rewards patience — the government incentivizes long-term investing over short-term trading.",
+        "example": "Buy HDFC Bank shares for ₹5L, sell after 14 months for ₹6.5L. Profit: ₹1.5L. First ₹1L is exempt. Tax: 10% of ₹50,000 = ₹5,000. Very efficient!",
+        "category": "tax"
+    },
+    "stcg": {
+        "term": "STCG (Short Term Capital Gains)",
+        "short": "Tax on stock market profits when you sell within 1 year of buying. 15% flat tax.",
+        "detailed": "If you sell stocks within 1 year of buying:\n• 15% flat tax on all profits\n• No exemption limit (unlike LTCG)\n• Losses CAN be offset against other STCG/LTCG\n\nStill better than crypto's 30%, but the message is clear: the tax system rewards holding longer.",
+        "example": "Buy Reliance shares for ₹5L in January, sell for ₹5.8L in June. Profit: ₹80,000. Tax: 15% of ₹80,000 = ₹12,000.",
+        "category": "tax"
+    },
+    "tds": {
+        "term": "TDS (Tax Deducted at Source)",
+        "short": "1% of every crypto transaction above ₹10,000 is automatically deducted as advance tax.",
+        "detailed": "When you sell crypto worth more than ₹10,000, the exchange automatically deducts 1% and sends it to the government as advance tax. This is NOT an extra tax — it's adjusted against your final tax liability when you file returns.\n\nBut it does reduce your available cash. If you're day trading frequently, these 1% deductions add up quickly.",
+        "example": "You sell ₹1,00,000 worth of BTC. TDS = ₹1,000 deducted automatically. You receive ₹99,000. At tax filing, this ₹1,000 is credited toward your 30% VDA tax.",
+        "category": "tax"
+    },
+    # ---- App-specific Terms ----
+    "confidence_score": {
+        "term": "Confidence Score",
+        "short": "How sure the app's analysis is, from 0-100%. Higher = more indicators agree. Even 80% confidence doesn't guarantee profit.",
+        "detailed": "This score combines multiple factors: technical indicators, market volume, volatility, and market hours. A high confidence score means the conditions look favorable based on historical patterns.\n\nIMPORTANT: 70% confidence does NOT mean '70% chance of profit.' It means '70% of the checklist items look favorable.' Markets can and do ignore all technical signals.",
+        "example": "Confidence 75%: RSI is favorable, volume is high, volatility is in tradeable range, and it's active trading hours. But the remaining 25% could include unknown risks like upcoming regulations or whale movements.",
+        "category": "app"
+    },
+    "day_trading": {
+        "term": "Day Trading",
+        "short": "Buying and selling within the same day (or a few hours). Very high risk. Most day traders lose money.",
+        "detailed": "Day trading means you open AND close a position on the same day. You don't hold overnight.\n\nReality check: Studies show 70-90% of retail day traders lose money. The ones who profit typically have years of experience, strict discipline, and can afford to lose their entire trading capital.\n\nIn India, day trading crypto is especially costly because of 30% VDA tax + 1% TDS on each transaction. A profitable day trade of +5% becomes only +2.5% after tax.",
+        "example": "You buy BTC at 10 AM at ₹66L, sell at 2 PM at ₹67.5L. Gross profit: ₹1.5L. After 30% tax: ₹1.05L actual profit. But if BTC dropped to ₹64.5L instead, you lost ₹1.5L with no tax benefit.",
+        "category": "app"
+    },
+    "deployment_pct": {
+        "term": "Deployment Percentage",
+        "short": "What portion of your money is being put to work in trades vs kept as cash.",
+        "detailed": "If you enter ₹1,00,000 as your capital and the app deploys 85% (₹85,000 across multiple trades), ₹15,000 stays as cash reserve. 100% deployment is risky because you have no buffer. Experienced traders typically deploy 50-80% and keep the rest as reserve for unexpected opportunities or to cover losses.",
+        "example": "₹1L capital, 80% deployed = ₹80,000 in active trades + ₹20,000 cash reserve. The reserve can be used if a better opportunity appears or to 'average down' if a position dips temporarily.",
+        "category": "app"
+    },
+    "win_probability": {
+        "term": "Win Probability",
+        "short": "The estimated chance that this trade will be profitable, based on current market signals. NOT a guarantee.",
+        "detailed": "This is calculated by looking at current technical indicators and comparing them to historical patterns. For example, when RSI, MACD, and volume all align bullishly, historical data shows that similar setups were profitable a certain percentage of the time.\n\nCRITICAL: A 60% win probability means that in similar past conditions, the price went up 60% of the time. But past patterns don't guarantee future results. The remaining 40% of the time, you lose. That's why stop-losses exist.",
+        "example": "Win probability 58% with a 1:2 risk-reward means: Out of 100 similar trades, roughly 58 would profit and 42 would hit stop-loss. With 1:2 RR, you'd still make money overall because your wins are twice as large as your losses.",
+        "category": "app"
+    },
+    "hold_recommendation": {
+        "term": "Hold (Recommendation)",
+        "short": "The app suggests doing nothing today. No clear buying or selling opportunity right now. Waiting is a valid strategy.",
+        "detailed": "'Hold' does not mean the market is bad. It means the current signals are mixed — some point up, some point down, and there's no clear advantage to entering a new trade today.\n\nFor beginners, 'Hold' is actually the SAFEST recommendation. The best traders know that doing nothing is often the smartest move. You don't lose money by sitting out.",
+        "example": "RSI at 52 (neutral), MACD flat, low volatility = Hold. There's no edge today. Wait for a clearer setup tomorrow.",
+        "category": "app"
+    },
+    "nifty50": {
+        "term": "Nifty 50",
+        "short": "India's top 50 largest companies listed on the stock market. Think of it as the 'score' of the Indian stock market.",
+        "detailed": "The Nifty 50 index tracks the 50 biggest companies on the National Stock Exchange (NSE) — companies like Reliance, TCS, HDFC Bank, Infosys. When people say 'the market went up 1% today,' they usually mean the Nifty 50 went up 1%.\n\nIt's a useful benchmark: if your portfolio gained 12% in a year but Nifty gained 15%, you actually underperformed — you'd have been better off buying a Nifty index fund.",
+        "example": "Nifty 50 at 23,114 with +0.78% means the combined value of India's top 50 companies went up 0.78% today. If you see Nifty falling sharply, it usually affects almost all Indian stocks.",
+        "category": "concepts"
+    },
+    "inr_usd": {
+        "term": "INR/USD Rate",
+        "short": "How many Indian Rupees one US Dollar is worth. Affects crypto prices because crypto is originally priced in USD.",
+        "detailed": "Crypto prices globally are set in USD. When you see BTC at ₹66L, that's the USD price multiplied by the INR/USD rate. If the rupee weakens (rate goes from 83 to 85), BTC in INR goes UP even if BTC in USD stayed the same. This means Indian crypto traders have a double risk: the crypto price AND the currency rate.",
+        "example": "BTC = $80,000 USD. At INR/USD 83: BTC = ₹66.4L. At INR/USD 85: BTC = ₹68L. The rupee weakening 'gave' you ₹1.6L on paper, but your purchasing power didn't actually increase.",
+        "category": "concepts"
+    }
+}
+
+@api_router.get("/glossary")
+async def get_glossary(category: Optional[str] = None, term: Optional[str] = None):
+    """Get finance glossary in simple, beginner-friendly language"""
+    if term:
+        entry = FINANCE_GLOSSARY.get(term)
+        if entry:
+            return {"term": entry}
+        raise HTTPException(status_code=404, detail=f"Term '{term}' not found in glossary")
+    
+    if category:
+        filtered = {k: v for k, v in FINANCE_GLOSSARY.items() if v["category"] == category}
+        return {
+            "terms": filtered,
+            "total": len(filtered),
+            "categories": ["basics", "technical", "trading", "concepts", "tax", "app"]
+        }
+    
+    return {
+        "terms": FINANCE_GLOSSARY,
+        "total": len(FINANCE_GLOSSARY),
+        "categories": ["basics", "technical", "trading", "concepts", "tax", "app"],
+        "category_labels": {
+            "basics": "Price and Market Basics",
+            "technical": "Chart Indicators (Technical)",
+            "trading": "Trading Terms",
+            "concepts": "Market Concepts",
+            "tax": "Indian Tax Rules",
+            "app": "App-Specific Terms"
+        }
+    }
+
+@api_router.get("/glossary/search/{query}")
+async def search_glossary(query: str):
+    """Search glossary terms"""
+    query_lower = query.lower()
+    results = {}
+    for key, entry in FINANCE_GLOSSARY.items():
+        if (query_lower in key.lower() or 
+            query_lower in entry["term"].lower() or 
+            query_lower in entry["short"].lower() or
+            query_lower in entry["detailed"].lower()):
+            results[key] = entry
+    return {"results": results, "total": len(results), "query": query}
+
+# ==================== RECOMMENDATION LOGGING ====================
+
+@api_router.post("/recommendations/log")
+async def log_recommendation(request: Request):
+    """Log every recommendation for future accuracy tracking"""
+    body = await request.json()
+    
+    log_entry = {
+        "log_id": str(uuid.uuid4()),
+        "timestamp": datetime.now(timezone.utc),
+        "recommendation_type": body.get("type", "unknown"),  # decision, daytrading, personalized
+        "recommendation": body.get("recommendation", ""),  # Buy/Sell/Hold/Crypto/Stocks
+        "confidence": body.get("confidence", 0),
+        "assets": body.get("assets", []),  # [{symbol, price_at_recommendation, action}]
+        "market_snapshot": body.get("market_snapshot", {}),
+        "user_capital": body.get("capital", 0),
+        "risk_profile": body.get("risk_profile", "medium"),
+        # These will be filled in later by a tracking job
+        "outcome_1h": None,
+        "outcome_24h": None,
+        "outcome_7d": None,
+        "was_profitable": None
+    }
+    
+    await db.recommendation_logs.insert_one(log_entry)
+    log_entry.pop("_id", None)
+    log_entry["timestamp"] = log_entry["timestamp"].isoformat()
+    
+    return {"success": True, "log_id": log_entry["log_id"]}
+
+@api_router.get("/recommendations/track-record")
+async def get_track_record():
+    """Get historical accuracy of recommendations"""
+    total = await db.recommendation_logs.count_documents({})
+    
+    if total == 0:
+        return {
+            "message": "No recommendations tracked yet. The app will start building a track record as you use it. Check back after a few days of usage.",
+            "total_recommendations": 0,
+            "track_record_available": False,
+            "disclaimer": "Past performance does not guarantee future results."
+        }
+    
+    # Get recent recommendations with outcomes
+    tracked = await db.recommendation_logs.find(
+        {"was_profitable": {"$ne": None}},
+        {"_id": 0}
+    ).sort("timestamp", -1).to_list(100)
+    
+    if not tracked:
+        return {
+            "message": "Recommendations are being tracked but outcomes haven't been measured yet. Check back in 24-48 hours for the first results.",
+            "total_recommendations": total,
+            "tracked_with_outcomes": 0,
+            "track_record_available": False,
+            "disclaimer": "Past performance does not guarantee future results."
+        }
+    
+    profitable = sum(1 for t in tracked if t.get("was_profitable"))
+    win_rate = round(profitable / len(tracked) * 100, 1) if tracked else 0
+    
+    return {
+        "total_recommendations": total,
+        "tracked_with_outcomes": len(tracked),
+        "profitable": profitable,
+        "unprofitable": len(tracked) - profitable,
+        "win_rate_pct": win_rate,
+        "track_record_available": True,
+        "honest_assessment": f"Out of {len(tracked)} tracked recommendations, {profitable} were profitable ({win_rate}% win rate). " + 
+            ("This is above average for algorithmic signals." if win_rate > 55 else 
+             "This is around average. Use with caution and always set stop-losses." if win_rate > 45 else
+             "This is below average. Consider using recommendations as one input, not the sole decision maker."),
+        "disclaimer": "Past performance does not guarantee future results. Always use stop-losses and never invest money you cannot afford to lose."
     }
 
 # Include router
