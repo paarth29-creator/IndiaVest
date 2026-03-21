@@ -77,6 +77,16 @@ export default function NewsScreen() {
     } else {
       fetchLeaders();
     }
+
+    const interval = setInterval(() => {
+      if (activeTab === 'news') {
+        fetchNews();
+      } else {
+        fetchLeaders();
+      }
+    }, 60000);
+
+    return () => clearInterval(interval);
   }, [activeTab, selectedCategory]);
 
   const fetchNews = async () => {

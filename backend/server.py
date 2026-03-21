@@ -1,5 +1,22 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
+import json
+
+class NumpySafeJSONResponse(JSONResponse):
+    """JSONResponse that handles numpy types without crashing."""
+    def render(self, content) -> bytes:
+        def default_handler(obj):
+            import numpy as np
+            if isinstance(obj, (np.integer,)):
+                return int(obj)
+            if isinstance(obj, (np.floating,)):
+                return float(obj)
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            if isinstance(obj, np.bool_):
+                return bool(obj)
+            raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+        return json.dumps(content, default=default_handler, allow_nan=False).encode("utf-8")
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -34,7 +51,7 @@ NEWSAPI_KEY = os.environ.get('NEWSAPI_KEY', '')
 FIREBASE_SERVER_KEY = os.environ.get('FIREBASE_SERVER_KEY', '')
 
 # Create the main app
-app = FastAPI(title="InvestIQ India - Production Ready")
+app = FastAPI(title="InvestIQ India - Production Ready", default_response_class=NumpySafeJSONResponse)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -582,8 +599,8 @@ class StockDataService:
                 # Calculate additional metrics
                 if not hist.empty:
                     returns = hist['Close'].pct_change().dropna()
-                    volatility = returns.std() * np.sqrt(252) * 100  # Annualized
-                    sharpe = (returns.mean() * 252) / (returns.std() * np.sqrt(252)) if returns.std() > 0 else 0
+                    volatility = float(returns.std() * np.sqrt(252) * 100)  # Annualized
+                    sharpe = float((returns.mean() * 252) / (returns.std() * np.sqrt(252))) if returns.std() > 0 else 0
                 else:
                     volatility = 0
                     sharpe = 0
@@ -783,7 +800,7 @@ class TechnicalAnalysis:
             )
             tr_list.append(tr)
         
-        atr = np.mean(tr_list[-period:])
+        atr = float(np.mean(tr_list[-period:]))
         return round(atr, 4)
     
     @staticmethod
@@ -1974,8 +1991,12 @@ async def should_day_trade_crypto(risk_profile: str = "medium"):
     should_trade = bool(total_score > 50 and avg_volatility > 1.5)
     confidence = float(min(total_score, 85))
     
-    # Top 5 recommendations
-    top_coins = sorted(liquid_coins, key=lambda x: abs(x["change_24h"]) * x["volume_usd"], reverse=True)[:5]
+    # Top 5 recommendations — rotate by hour so the same 5 don't appear every time
+    # Sort by composite score first, then rotate the pool hourly
+    sorted_liquid = sorted(liquid_coins, key=lambda x: abs(x["change_24h"]) * x["volume_usd"], reverse=True)
+    hour_offset = datetime.now().hour % max(len(sorted_liquid) - 4, 1)
+    rotated = sorted_liquid[hour_offset:] + sorted_liquid[:hour_offset]
+    top_coins = rotated[:5]
     
     recommendations = []
     for coin in top_coins:
@@ -2009,7 +2030,7 @@ async def should_day_trade_crypto(risk_profile: str = "medium"):
             "signal_strength": "strong" if volatility > 3 else "moderate" if volatility > 1.5 else "weak"
         })
     
-    reasoning = f"""**Day Trading Assessment - {datetime.now(timezone.utc).strftime('%Y-%m-%d')}**
+    reasoning = strip_markdown(f"""Day Trading Assessment - {datetime.now(timezone.utc).strftime('%Y-%m-%d')}
 
 📊 **Market Conditions:**
 - Total crypto volume: ${total_volume/USD_TO_INR/1e9:.1f}B
@@ -2035,7 +2056,7 @@ If market conditions are unfavorable, consider:
 2. Swing trading (1-7 days) for better risk-adjusted returns
 3. DCA into long-term positions
 
-{DISCLAIMER}"""
+{DISCLAIMER}""")
     
     return {
         "should_trade": bool(should_trade),
@@ -2165,8 +2186,9 @@ REMEMBER: The best traders know when NOT to trade. Protecting capital is more im
         change_24h = data.get("change_24h", 0)
         abs_change = abs(change_24h)
         
-        # Require minimum $100M volume and >1.5% volatility for day trading
-        if volume_usd > 100000000 and abs_change > 1.5:
+        # Lowered to $50M volume threshold to include more variety
+        # Lowered volatility to 1.0% so low-vol days still produce results
+        if volume_usd > 50000000 and abs_change > 1.0:
             momentum = 1 if change_24h > 0 else -1
             volatility_score = min(abs_change / 2, 5)
             volume_score = min(volume_usd / 1e9, 5)
@@ -2184,13 +2206,30 @@ REMEMBER: The best traders know when NOT to trade. Protecting capital is more im
     
     risk_mult = RISK_MULTIPLIERS.get(risk_profile, RISK_MULTIPLIERS["medium"])
     
-    # FULL DEPLOYMENT: Allocate 100% of capital across 3-5 positions
-    num_positions = random.choice([3, 4, 5])
+    # num_positions is deterministic from the seed (set above)
+    num_positions = [3, 4, 5][seed_value % 3]
     
-    # Deterministic but varied coin selection
+    # Varied but deterministic selection:
+    # Sort by score, take top 15, use seed to pick a spread across the pool
     sorted_coins = sorted(tradeable_coins, key=lambda x: x["score"], reverse=True)[:15]
-    random.shuffle(sorted_coins)
-    selected_coins = sorted(sorted_coins[:8], key=lambda x: x["score"], reverse=True)[:num_positions]
+    # Pick every Nth coin from sorted list for variety, not just the top N
+    step = max(1, len(sorted_coins) // (num_positions + 1))
+    selected_coins = [sorted_coins[i * step % len(sorted_coins)] for i in range(num_positions)] if sorted_coins else []
+    # Deduplicate while preserving order
+    seen = set()
+    unique_selected = []
+    for c in selected_coins:
+        if c["symbol"] not in seen:
+            seen.add(c["symbol"])
+            unique_selected.append(c)
+    # Fill remaining slots from top of sorted list if dedup reduced count
+    for c in sorted_coins:
+        if len(unique_selected) >= num_positions:
+            break
+        if c["symbol"] not in seen:
+            seen.add(c["symbol"])
+            unique_selected.append(c)
+    selected_coins = unique_selected
     
     # Fixed allocation templates (deterministic based on seed)
     if num_positions == 3:
@@ -2387,9 +2426,6 @@ Only proceed if you can afford to lose the full Rs {capital:,.0f}. Day trading h
     # Cache the result for consistency
     set_cached_advice(cache_key, result)
     
-    # Reset random seed to avoid affecting other code
-    random.seed()
-    
     return result
 
 # ==================== HIGH RISK / HIGH REWARD ====================
@@ -2472,9 +2508,9 @@ async def get_high_risk_opportunities(horizon: str, risk_profile: str = "aggress
     crypto_opportunities.sort(key=lambda x: x["upside_estimate_pct"], reverse=True)
     stock_opportunities.sort(key=lambda x: x["upside_estimate_pct"], reverse=True)
     
-    reasoning = f"""**High Risk/High Reward Analysis - {horizon.upper()} Horizon**
+    reasoning = strip_markdown(f"""High Risk/High Reward Analysis - {horizon.upper()} Horizon
 
-🚨 **EXTREME RISK WARNING:**
+EXTREME RISK WARNING:
 {EXTREME_RISK_WARNING}
 
 📊 **Selection Criteria:**
@@ -2498,10 +2534,10 @@ Instead of high-risk speculation:
 3. Paper trade first to test strategy
 4. Consider: Is the tax-adjusted expected return positive?
 
-**Tax Reality Check:**
+Tax Reality Check:
 With 30% VDA tax, a 100% crypto gain becomes 70% net. A 50% loss is still 50% loss. The math often doesn't favor speculation.
 
-{DISCLAIMER}"""
+{DISCLAIMER}""")
     
     return {
         "horizon": horizon,

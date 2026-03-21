@@ -27,7 +27,13 @@ interface Recommendation {
   entry_range: { low: number; high: number };
   stop_loss: number;
   stop_loss_pct: number;
-  take_profit: { tp1_1to1: number; tp2_1to2: number; tp3_1to3: number };
+  take_profit: { 
+    tp1_1to1: number; 
+    tp2_1to2?: number;       // general recs
+    tp2_1to1_5?: number;     // personalized recs
+    tp3_1to3?: number;
+    tp3_1to2_5?: number;
+  };
   max_position_pct?: number;
   signal_strength?: string;
   suggested_quantity?: number;
@@ -179,11 +185,12 @@ export default function DayTradingScreen() {
     setCapitalInput(Math.round(value).toString());
   };
 
-  const formatCurrency = (value: number) => {
-    if (value >= 100000) {
-      return `₹${(value / 100000).toFixed(2)}L`;
+  const formatCurrency = (value: number | undefined | null) => {
+    const safe = value ?? 0;
+    if (safe >= 100000) {
+      return `₹${(safe / 100000).toFixed(2)}L`;
     }
-    return `₹${value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+    return `₹${safe.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
   };
 
   const formatVolume = (value: number) => {
@@ -288,7 +295,7 @@ export default function DayTradingScreen() {
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>TP2 (1:2)</Text>
-                <Text style={[styles.detailValue, { color: '#10b981' }]}>{formatCurrency(rec.take_profit.tp2_1to2)}</Text>
+                <Text style={[styles.detailValue, { color: '#10b981' }]}>{formatCurrency(rec.take_profit.tp2_1to2 ?? rec.take_profit.tp2_1to1_5 ?? 0)}</Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Target Time</Text>
@@ -598,7 +605,7 @@ export default function DayTradingScreen() {
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Take Profit (1:2)</Text>
                         <Text style={[styles.detailValue, { color: '#10b981' }]}>
-                          {formatCurrency(coin.take_profit.tp2_1to2)}
+                          {formatCurrency(coin.take_profit.tp2_1to2 ?? coin.take_profit.tp2_1to1_5 ?? 0)}
                         </Text>
                       </View>
                     </View>
