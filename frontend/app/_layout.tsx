@@ -38,7 +38,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <RootLayoutNav />
+        <GlossaryProvider>
+          <RootLayoutNav />
+        </GlossaryProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );
