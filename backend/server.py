@@ -328,10 +328,15 @@ class CryptoDataService:
                     return await self._get_prices_via_usd(client, headers)
                 else:
                     logger.warning(f"CoinGecko API returned {response.status_code}, using fallback")
-                    return self._get_fallback_prices()
+                    fallback = self._get_fallback_prices()
+                    # Cache fallback for 60s so we don't flicker between real/fallback
+                    self.cache[cache_key] = (datetime.now() - timedelta(seconds=self.cache_ttl - 60), fallback)
+                    return fallback
         except Exception as e:
             logger.error(f"CoinGecko API error: {e}")
-            return self._get_fallback_prices()
+            fallback = self._get_fallback_prices()
+            self.cache[cache_key] = (datetime.now() - timedelta(seconds=self.cache_ttl - 60), fallback)
+            return fallback
     
     async def _get_prices_via_usd(self, client, headers) -> Dict:
         """Fallback: Get USD prices and convert to INR"""
@@ -384,7 +389,9 @@ class CryptoDataService:
                 return result
         except Exception as e:
             logger.error(f"USD conversion fallback error: {e}")
-        return self._get_fallback_prices()
+        fallback = self._get_fallback_prices()
+        self.cache["crypto_prices"] = (datetime.now() - timedelta(seconds=self.cache_ttl - 60), fallback)
+        return fallback
     
     async def get_coin_detail(self, coin_id: str) -> Dict:
         """Get detailed coin data including on-chain metrics"""
@@ -577,11 +584,15 @@ class StockDataService:
                 self.cache[cache_key] = (datetime.now(), result)
                 return result
             else:
-                return self._get_fallback_stocks()
+                fallback = self._get_fallback_stocks()
+                self.cache[cache_key] = (datetime.now() - timedelta(seconds=self.cache_ttl - 60), fallback)
+                return fallback
                 
         except Exception as e:
             logger.error(f"Stock fetch error: {e}")
-            return self._get_fallback_stocks()
+            fallback = self._get_fallback_stocks()
+            self.cache[cache_key] = (datetime.now() - timedelta(seconds=self.cache_ttl - 60), fallback)
+            return fallback
     
     async def get_stock_detail(self, symbol: str) -> Dict:
         """Get detailed stock data"""
