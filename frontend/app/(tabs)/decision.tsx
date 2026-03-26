@@ -14,8 +14,47 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { InfoButton, GlossaryScreen } from './FinanceTooltip';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+
+interface FactorScore {
+  factor: string;
+  weight: number;
+  raw_score: number;
+  weighted_contribution: number;
+  confidence: number;
+  signal: string;
+}
+
+interface ScoringData {
+  decision: {
+    recommendation: string;
+    confidence: number;
+    avg_market_score: number;
+    buy_signals: number;
+    sell_signals: number;
+  };
+  factor_summary: Record<string, {
+    avg_score: number;
+    weight: number;
+    signal: string;
+  }>;
+  coin_scores: Record<string, {
+    action: string;
+    score: number;
+    confidence: number;
+    price_inr: number;
+    change_24h: number;
+  }>;
+  best_opportunity: {
+    symbol: string;
+    action: string;
+    score: number;
+    reasoning: string;
+  } | null;
+  engine_version: string;
+}
 
 interface Decision {
   recommendation: string;
@@ -79,6 +118,8 @@ export default function DecisionScreen() {
     nifty_change: '',
     confidence: '',
   });
+  const [scoringData, setScoringData] = useState<ScoringData | null>(null);
+  const [showGlossary, setShowGlossary] = useState(false);
 
   useEffect(() => {
     fetchDecision();
@@ -94,25 +135,40 @@ export default function DecisionScreen() {
   const fetchDecision = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_URL}/api/decision/today`);
-      const data = await response.json();
-      setDecision(data.decision);
-      setMarketSnapshot(data.market_snapshot);
-      setDate(data.date);
-      setTimeIst(data.time_ist);
-      setDataSources(data.data_sources || {});
       
-      // Initialize edited values
-      if (data.market_snapshot) {
-        setEditedValues({
-          btc_price: String(data.market_snapshot.btc_price || ''),
-          btc_change: String(data.market_snapshot.btc_change || ''),
-          btc_rsi: String(data.market_snapshot.btc_rsi || ''),
-          eth_price: String(data.market_snapshot.eth_price || ''),
-          nifty_change: String(data.market_snapshot.nifty_change || ''),
-          confidence: String(data.decision?.confidence || ''),
-        });
+      // Fetch both old decision and new 4-factor scoring in parallel
+      const [decisionRes, scoringRes] = await Promise.allSettled([
+        fetch(`${API_URL}/api/decision/today`),
+        fetch(`${API_URL}/api/scoring/decision`),
+      ]);
+      
+      // Process old decision data
+      if (decisionRes.status === 'fulfilled' && decisionRes.value.ok) {
+        const data = await decisionRes.value.json();
+        setDecision(data.decision);
+        setMarketSnapshot(data.market_snapshot);
+        setDate(data.date);
+        setTimeIst(data.time_ist);
+        setDataSources(data.data_sources || {});
+        
+        if (data.market_snapshot) {
+          setEditedValues({
+            btc_price: String(data.market_snapshot.btc_price || ''),
+            btc_change: String(data.market_snapshot.btc_change || ''),
+            btc_rsi: String(data.market_snapshot.btc_rsi || ''),
+            eth_price: String(data.market_snapshot.eth_price || ''),
+            nifty_change: String(data.market_snapshot.nifty_change || ''),
+            confidence: String(data.decision?.confidence || ''),
+          });
+        }
       }
+      
+      // Process 4-factor scoring data
+      if (scoringRes.status === 'fulfilled' && scoringRes.value.ok) {
+        const scoring = await scoringRes.value.json();
+        setScoringData(scoring);
+      }
+      
     } catch (error) {
       console.error('Error fetching decision:', error);
     } finally {
@@ -204,6 +260,13 @@ export default function DecisionScreen() {
             </View>
             <View style={styles.headerButtons}>
               <TouchableOpacity 
+                style={styles.learnButton}
+                onPress={() => setShowGlossary(true)}
+              >
+                <Ionicons name="book-outline" size={16} color="#f59e0b" />
+                <Text style={styles.learnButtonText}>Learn</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
                 style={[styles.editButton, editMode && styles.editButtonActive]}
                 onPress={() => setEditMode(!editMode)}
               >
@@ -220,6 +283,9 @@ export default function DecisionScreen() {
             </View>
           </View>
         </View>
+
+        {/* Glossary Modal */}
+        <GlossaryScreen visible={showGlossary} onClose={() => setShowGlossary(false)} />
 
         {/* Data Sources Banner */}
         <View style={styles.sourcesBanner}>
@@ -274,6 +340,91 @@ export default function DecisionScreen() {
             <Text style={styles.editModeBannerText}>
               Edit Mode: Tap any number to modify. Changes are session-only for testing.
             </Text>
+          </View>
+        )}
+
+        {/* 4-Factor Analysis */}
+        {scoringData && (
+          <View style={styles.factorSection}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.sectionTitle}>4-Factor Analysis</Text>
+                <InfoButton termKey="confidence_score" size={16} />
+              </View>
+              <Text style={{ fontSize: 11, color: '#6b7280' }}>{scoringData.engine_version}</Text>
+            </View>
+
+            {/* Factor Score Bars */}
+            {scoringData.factor_summary && Object.entries(scoringData.factor_summary).map(([key, factor]) => {
+              const barColor = factor.signal === 'bullish' ? '#10b981' : factor.signal === 'bearish' ? '#ef4444' : '#6b7280';
+              const barWidth = Math.min(Math.abs(factor.avg_score), 100);
+              const isPositive = factor.avg_score >= 0;
+              const factorLabels: Record<string, string> = {
+                'F1_technical_regime': 'Technicals',
+                'F2_volatility_filter': 'Volatility',
+                'F3_news_sentiment': 'News',
+                'F4_onchain_flows': 'Whale Activity',
+              };
+              
+              return (
+                <View key={key} style={styles.factorRow}>
+                  <View style={styles.factorLabelRow}>
+                    <Text style={styles.factorName}>{factorLabels[key] || key}</Text>
+                    <Text style={[styles.factorScore, { color: barColor }]}>
+                      {factor.avg_score >= 0 ? '+' : ''}{factor.avg_score.toFixed(0)}
+                    </Text>
+                  </View>
+                  <View style={styles.factorBarTrack}>
+                    <View style={[
+                      styles.factorBarFill,
+                      { 
+                        width: `${barWidth}%`, 
+                        backgroundColor: barColor,
+                        alignSelf: isPositive ? 'flex-start' : 'flex-end',
+                      }
+                    ]} />
+                  </View>
+                  <View style={styles.factorMeta}>
+                    <Text style={[styles.factorSignal, { color: barColor }]}>
+                      {factor.signal.toUpperCase()}
+                    </Text>
+                    <Text style={styles.factorWeight}>{(factor.weight * 100).toFixed(0)}% weight</Text>
+                  </View>
+                </View>
+              );
+            })}
+
+            {/* Coin Rankings */}
+            {scoringData.coin_scores && (
+              <View style={styles.coinRankSection}>
+                <Text style={styles.coinRankTitle}>Coin Scores</Text>
+                {Object.entries(scoringData.coin_scores).map(([symbol, data]) => {
+                  const actionColor = data.action === 'BUY' ? '#10b981' : data.action === 'SELL' ? '#ef4444' : '#f59e0b';
+                  return (
+                    <View key={symbol} style={styles.coinRankRow}>
+                      <Text style={styles.coinRankSymbol}>{symbol}</Text>
+                      <View style={[styles.coinRankAction, { backgroundColor: actionColor + '20' }]}>
+                        <Text style={[styles.coinRankActionText, { color: actionColor }]}>{data.action}</Text>
+                      </View>
+                      <Text style={styles.coinRankScore}>{data.score >= 0 ? '+' : ''}{data.score.toFixed(1)}</Text>
+                      <Text style={[styles.coinRankChange, { color: data.change_24h >= 0 ? '#10b981' : '#ef4444' }]}>
+                        {data.change_24h >= 0 ? '+' : ''}{data.change_24h.toFixed(1)}%
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Best Opportunity */}
+            {scoringData.best_opportunity && scoringData.best_opportunity.action === 'BUY' && (
+              <View style={styles.bestOpportunity}>
+                <Text style={styles.bestOpportunityTitle}>Top Opportunity: {scoringData.best_opportunity.symbol}</Text>
+                <Text style={styles.bestOpportunityScore}>
+                  Score: {scoringData.best_opportunity.score >= 0 ? '+' : ''}{scoringData.best_opportunity.score.toFixed(1)} ({scoringData.best_opportunity.action})
+                </Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -922,5 +1073,133 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  learnButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.2)',
+    gap: 4,
+  },
+  learnButtonText: {
+    color: '#f59e0b',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  factorSection: {
+    marginBottom: 24,
+    backgroundColor: '#1a1a2e',
+    borderRadius: 16,
+    padding: 16,
+  },
+  factorRow: {
+    marginBottom: 14,
+  },
+  factorLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  factorName: {
+    color: '#d1d5db',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  factorScore: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  factorBarTrack: {
+    height: 6,
+    backgroundColor: '#2d2d44',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  factorBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  factorMeta: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  factorSignal: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  factorWeight: {
+    fontSize: 10,
+    color: '#6b7280',
+  },
+  coinRankSection: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#2d2d44',
+  },
+  coinRankTitle: {
+    color: '#9ca3af',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  coinRankRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 10,
+  },
+  coinRankSymbol: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+    width: 45,
+  },
+  coinRankAction: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    minWidth: 45,
+    alignItems: 'center',
+  },
+  coinRankActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  coinRankScore: {
+    color: '#d1d5db',
+    fontSize: 13,
+    flex: 1,
+    textAlign: 'right',
+  },
+  coinRankChange: {
+    fontSize: 13,
+    fontWeight: '500',
+    width: 55,
+    textAlign: 'right',
+  },
+  bestOpportunity: {
+    marginTop: 12,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  bestOpportunityTitle: {
+    color: '#10b981',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  bestOpportunityScore: {
+    color: '#6ee7b7',
+    fontSize: 12,
+    marginTop: 4,
   },
 });

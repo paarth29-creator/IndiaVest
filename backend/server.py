@@ -39,6 +39,7 @@ from scipy import stats
 # 4-Factor Scoring Engine
 from scoring_engine import ScoringEngine, FACTOR_WEIGHTS, SYMBOL_TO_COINGECKO
 from data_preloader import DataPreloader, run_preload_and_backtest
+from outcome_tracker import start_outcome_tracker
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -3664,8 +3665,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_preload():
-    """Pre-load market data and run backtests on startup (background task)."""
+    """Pre-load market data, run backtests, and start outcome tracker on startup."""
     asyncio.create_task(run_preload_and_backtest(data_preloader, scoring_engine))
+    asyncio.create_task(start_outcome_tracker(db))
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
