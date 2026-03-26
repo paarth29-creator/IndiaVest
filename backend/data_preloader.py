@@ -33,10 +33,12 @@ logger = logging.getLogger(__name__)
 COINGECKO_API_KEY = os.environ.get('COINGECKO_API_KEY', '')
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 
-# All coins we track (CoinGecko IDs)
+# All coins we track (CoinGecko IDs) — expanded to 20
 TRACKED_COINS = [
     "bitcoin", "ethereum", "solana", "binancecoin", "ripple",
-    "cardano", "dogecoin", "avalanche-2", "polkadot", "chainlink"
+    "cardano", "dogecoin", "avalanche-2", "polkadot", "chainlink",
+    "near", "aptos", "arbitrum", "optimism", "injective-protocol",
+    "render-token", "sui", "sei-network", "celestia", "fetch-ai"
 ]
 
 # How often to refresh raw data (hours)

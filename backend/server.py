@@ -40,6 +40,7 @@ from scipy import stats
 from scoring_engine import ScoringEngine, FACTOR_WEIGHTS, SYMBOL_TO_COINGECKO
 from data_preloader import DataPreloader, run_preload_and_backtest
 from outcome_tracker import start_outcome_tracker
+from trade_plan_generator import TradePlanGenerator, CONFIDENCE_THRESHOLDS
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -61,6 +62,7 @@ app = FastAPI(title="InvestIQ India - Production Ready", default_response_class=
 # Initialize 4-Factor Scoring Engine
 scoring_engine = ScoringEngine(db)
 data_preloader = DataPreloader(db)
+trade_plan_gen = TradePlanGenerator(scoring_engine, None)  # crypto_service set after class definition
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -511,6 +513,7 @@ class CryptoDataService:
         }
 
 crypto_service = CryptoDataService()
+trade_plan_gen.crypto = crypto_service  # Wire crypto service into trade plan generator
 
 # ==================== STOCK DATA SERVICE (yfinance) ====================
 
@@ -1880,7 +1883,7 @@ RECOMMENDED ACTION: {recommendation.upper()} with {confidence}% confidence.
         allocations["stocks"] = {"HDFCBANK": 25, "TCS": 25, "RELIANCE": 25, "INFY": 25}
     
     return {
-        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "date": (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d"),
         "time_ist": (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime("%H:%M IST"),
         "market_snapshot": market_data,
         "decision": {
@@ -2038,7 +2041,7 @@ async def should_day_trade_crypto(risk_profile: str = "medium"):
             "signal_strength": "strong" if volatility > 3 else "moderate" if volatility > 1.5 else "weak"
         })
     
-    reasoning = strip_markdown(f"""Day Trading Assessment - {datetime.now(timezone.utc).strftime('%Y-%m-%d')}
+    reasoning = strip_markdown(f"""Day Trading Assessment - {(datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime('%Y-%m-%d')}
 
 📊 **Market Conditions:**
 - Total crypto volume: ${total_volume/USD_TO_INR/1e9:.1f}B
@@ -3547,6 +3550,69 @@ async def refresh_scoring_data():
     }
 
 
+@api_router.get("/scoring/trade-plan")
+async def get_trade_plan(
+    budget: float = Query(default=10000, ge=500, le=5000000, description="Budget in INR"),
+    risk_profile: str = Query(default="moderate", description="conservative, moderate, or aggressive"),
+    max_coins: int = Query(default=5, ge=1, le=5, description="Max coins in plan"),
+):
+    """Generate a complete trade plan with YES/NO/WAIT verdict.
+    
+    This is the main endpoint for the 'One Screen' experience.
+    Takes a budget, scores all coins, and returns:
+    - Clear YES/NO/WAIT verdict
+    - If YES: exact coins, amounts, entry/exit prices, expected P/L after tax
+    - Step-by-step exit instructions for each position
+    """
+    plan = await trade_plan_gen.generate(
+        budget=budget,
+        risk_profile=risk_profile,
+        max_coins=max_coins,
+    )
+    
+    # Auto-log the recommendation for track record
+    if plan.get("verdict") == "YES" and plan.get("positions"):
+        try:
+            log_entry = {
+                "log_id": str(uuid.uuid4()),
+                "timestamp": datetime.now(timezone.utc),
+                "recommendation_type": "trade_plan",
+                "recommendation": "BUY",
+                "confidence": plan.get("positions", [{}])[0].get("confidence", 0),
+                "assets": [
+                    {
+                        "symbol": p["symbol"],
+                        "price_at_recommendation": p["current_price"],
+                        "action": "BUY",
+                        "amount_inr": p["amount_inr"],
+                        "stop_loss": p["stop_loss"]["price"],
+                        "take_profit_1": p["take_profit"]["tp1"]["price"],
+                    }
+                    for p in plan["positions"]
+                ],
+                "capital": budget,
+                "risk_profile": risk_profile,
+                "market_snapshot": plan.get("market_summary", {}),
+                "outcome_24h": None,
+                "outcome_7d": None,
+                "was_profitable": None,
+            }
+            await db.recommendation_logs.insert_one(log_entry)
+        except Exception as e:
+            logger.warning(f"Failed to log trade plan recommendation: {e}")
+    
+    return plan
+
+
+@api_router.get("/scoring/risk-profiles")
+async def get_risk_profiles():
+    """Get available risk profile options for the UI."""
+    return {
+        "profiles": CONFIDENCE_THRESHOLDS,
+        "default": "moderate",
+    }
+
+
 @api_router.get("/scoring/decision")
 async def get_scored_decision(risk_profile: str = "medium"):
     """NEW decision endpoint powered by 4-factor scoring engine.
@@ -3607,7 +3673,7 @@ async def get_scored_decision(risk_profile: str = "medium"):
     eth = crypto_prices.get("ETH", {})
     
     return {
-        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "date": (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d"),
         "time_ist": (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime("%H:%M IST"),
         "engine_version": "4-factor-v1",
         "decision": {

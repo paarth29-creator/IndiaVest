@@ -34,10 +34,12 @@ logger = logging.getLogger(__name__)
 COINGECKO_API_KEY = os.environ.get('COINGECKO_API_KEY', '')
 COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
 
-# Top coins to backtest (CoinGecko IDs)
+# Top coins to backtest (CoinGecko IDs) — expanded to 20
 BACKTEST_COINS = [
     "bitcoin", "ethereum", "solana", "binancecoin", "ripple",
-    "cardano", "dogecoin", "avalanche-2", "polkadot", "chainlink"
+    "cardano", "dogecoin", "avalanche-2", "polkadot", "chainlink",
+    "near", "aptos", "arbitrum", "optimism", "injective-protocol",
+    "render-token", "sui", "sei-network", "celestia", "fetch-ai"
 ]
 
 SYMBOL_TO_COINGECKO = {
@@ -45,7 +47,10 @@ SYMBOL_TO_COINGECKO = {
     "BNB": "binancecoin", "XRP": "ripple", "ADA": "cardano",
     "DOGE": "dogecoin", "AVAX": "avalanche-2", "DOT": "polkadot",
     "LINK": "chainlink", "MATIC": "matic-network", "UNI": "uniswap",
-    "LTC": "litecoin", "ATOM": "cosmos", "NEAR": "near"
+    "LTC": "litecoin", "ATOM": "cosmos", "NEAR": "near",
+    "APT": "aptos", "ARB": "arbitrum", "OP": "optimism",
+    "INJ": "injective-protocol", "RENDER": "render-token",
+    "SUI": "sui", "SEI": "sei-network", "TIA": "celestia", "FET": "fetch-ai"
 }
 
 # ====================================================================
