@@ -36,6 +36,10 @@ import csv
 import numpy as np
 from scipy import stats
 
+# 4-Factor Scoring Engine
+from scoring_engine import ScoringEngine, FACTOR_WEIGHTS, SYMBOL_TO_COINGECKO
+from data_preloader import DataPreloader, run_preload_and_backtest
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -52,6 +56,10 @@ FIREBASE_SERVER_KEY = os.environ.get('FIREBASE_SERVER_KEY', '')
 
 # Create the main app
 app = FastAPI(title="InvestIQ India - Production Ready", default_response_class=NumpySafeJSONResponse)
+
+# Initialize 4-Factor Scoring Engine
+scoring_engine = ScoringEngine(db)
+data_preloader = DataPreloader(db)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -3445,6 +3453,203 @@ async def get_track_record():
         "disclaimer": "Past performance does not guarantee future results. Always use stop-losses and never invest money you cannot afford to lose."
     }
 
+# ==================== 4-FACTOR SCORING ENDPOINTS ====================
+
+@api_router.get("/scoring/score/{symbol}")
+async def get_asset_score(symbol: str):
+    """Get full 4-factor score for a single asset.
+    Returns weighted recommendation with per-factor breakdown."""
+    symbol = symbol.upper()
+    
+    # Get current price data to pass to scoring engine
+    crypto_prices = await crypto_service.get_prices()
+    price_data = crypto_prices.get(symbol, {})
+    
+    result = await scoring_engine.score(
+        symbol,
+        volume_24h=price_data.get("volume_24h", 0),
+        volume_avg=price_data.get("volume_24h", 0) * 0.8,  # Estimate avg as 80% of current
+    )
+    
+    # Add current price context
+    result["current_price_inr"] = price_data.get("price_inr", 0)
+    result["change_24h"] = price_data.get("change_24h", 0)
+    result["disclaimer"] = DISCLAIMER
+    
+    return result
+
+
+@api_router.get("/scoring/multi")
+async def get_multi_score(symbols: str = "BTC,ETH,SOL,BNB,XRP"):
+    """Score multiple assets. Comma-separated symbols."""
+    symbol_list = [s.strip().upper() for s in symbols.split(",")]
+    crypto_prices = await crypto_service.get_prices()
+    
+    results = {}
+    for symbol in symbol_list[:10]:  # Max 10
+        price_data = crypto_prices.get(symbol, {})
+        result = await scoring_engine.score(
+            symbol,
+            volume_24h=price_data.get("volume_24h", 0),
+            volume_avg=price_data.get("volume_24h", 0) * 0.8,
+        )
+        result["current_price_inr"] = price_data.get("price_inr", 0)
+        result["change_24h"] = price_data.get("change_24h", 0)
+        results[symbol] = result
+    
+    # Sort by score (highest first)
+    sorted_symbols = sorted(results.keys(), key=lambda s: results[s]["final_score"], reverse=True)
+    
+    return {
+        "scores": results,
+        "ranking": sorted_symbols,
+        "buy_signals": [s for s in sorted_symbols if results[s]["action"] == "BUY"],
+        "sell_signals": [s for s in sorted_symbols if results[s]["action"] == "SELL"],
+        "hold_signals": [s for s in sorted_symbols if results[s]["action"] == "HOLD"],
+        "factor_weights": FACTOR_WEIGHTS,
+        "disclaimer": DISCLAIMER,
+    }
+
+
+@api_router.get("/scoring/backtests")
+async def get_backtest_summary():
+    """View backtested regime statistics for all tracked coins."""
+    summary = await scoring_engine.get_backtest_summary()
+    return {
+        "backtests": summary,
+        "total_coins": len(summary),
+        "note": "Backtests use 365 days of historical data. Refreshed every 24 hours.",
+        "disclaimer": DISCLAIMER,
+    }
+
+
+@api_router.get("/scoring/cache-status")
+async def get_cache_status():
+    """Check data preloader cache freshness."""
+    status = await data_preloader.get_cache_status()
+    return {
+        "cache": status,
+        "total_coins": len(status),
+        "fresh_count": sum(1 for v in status.values() if v.get("fresh")),
+        "stale_count": sum(1 for v in status.values() if not v.get("fresh")),
+    }
+
+
+@api_router.post("/scoring/refresh")
+async def refresh_scoring_data():
+    """Force refresh all market data and backtests. Takes ~30 seconds."""
+    load_results = await data_preloader.load_all(days=365, force=True)
+    await scoring_engine.warm_cache()
+    return {
+        "status": "refreshed",
+        "results": load_results,
+    }
+
+
+@api_router.get("/scoring/decision")
+async def get_scored_decision(risk_profile: str = "medium"):
+    """NEW decision endpoint powered by 4-factor scoring engine.
+    Runs alongside the old /decision/today endpoint during testing."""
+    
+    crypto_prices = await crypto_service.get_prices()
+    
+    # Score top 5 coins
+    top_symbols = ["BTC", "ETH", "SOL", "BNB", "XRP"]
+    scores = {}
+    for symbol in top_symbols:
+        price_data = crypto_prices.get(symbol, {})
+        scores[symbol] = await scoring_engine.score(
+            symbol,
+            volume_24h=price_data.get("volume_24h", 0),
+            volume_avg=price_data.get("volume_24h", 0) * 0.8,
+        )
+    
+    # Determine overall market recommendation
+    avg_score = np.mean([s["final_score"] for s in scores.values()])
+    buy_count = sum(1 for s in scores.values() if s["action"] == "BUY")
+    sell_count = sum(1 for s in scores.values() if s["action"] == "SELL")
+    
+    if buy_count >= 3:
+        market_action = "Crypto"
+        market_confidence = min(80, 50 + buy_count * 10)
+    elif sell_count >= 3:
+        market_action = "Hold"
+        market_confidence = min(80, 50 + sell_count * 10)
+    elif avg_score > 20:
+        market_action = "Crypto"
+        market_confidence = min(70, 45 + int(avg_score))
+    elif avg_score < -20:
+        market_action = "Hold"
+        market_confidence = min(70, 45 + int(abs(avg_score)))
+    else:
+        market_action = "Hold"
+        market_confidence = 55
+    
+    # Build factor summary across all scored coins
+    factor_summary = {}
+    for fname in FACTOR_WEIGHTS:
+        factor_scores = []
+        for symbol, result in scores.items():
+            fd = result.get("factor_details", {}).get(fname, {})
+            factor_scores.append(fd.get("score", 0))
+        factor_summary[fname] = {
+            "avg_score": round(float(np.mean(factor_scores)), 1),
+            "weight": FACTOR_WEIGHTS[fname],
+            "signal": "bullish" if np.mean(factor_scores) > 15 else "bearish" if np.mean(factor_scores) < -15 else "neutral",
+        }
+    
+    # Get best and worst rated coins
+    ranked = sorted(scores.items(), key=lambda x: x[1]["final_score"], reverse=True)
+    
+    # Build market snapshot
+    btc = crypto_prices.get("BTC", {})
+    eth = crypto_prices.get("ETH", {})
+    
+    return {
+        "date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "time_ist": (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)).strftime("%H:%M IST"),
+        "engine_version": "4-factor-v1",
+        "decision": {
+            "recommendation": market_action,
+            "confidence": market_confidence,
+            "avg_market_score": round(float(avg_score), 1),
+            "buy_signals": buy_count,
+            "sell_signals": sell_count,
+        },
+        "factor_summary": factor_summary,
+        "coin_scores": {
+            symbol: {
+                "action": result["action"],
+                "score": result["final_score"],
+                "confidence": result["confidence"],
+                "price_inr": crypto_prices.get(symbol, {}).get("price_inr", 0),
+                "change_24h": crypto_prices.get(symbol, {}).get("change_24h", 0),
+            }
+            for symbol, result in ranked
+        },
+        "best_opportunity": {
+            "symbol": ranked[0][0],
+            "action": ranked[0][1]["action"],
+            "score": ranked[0][1]["final_score"],
+            "reasoning": ranked[0][1].get("factor_details", {}).get("F1_technical_regime", {}).get("reasoning", ""),
+        } if ranked else None,
+        "market_snapshot": {
+            "btc_price_inr": btc.get("price_inr", 0),
+            "btc_change_24h": btc.get("change_24h", 0),
+            "eth_price_inr": eth.get("price_inr", 0),
+            "eth_change_24h": eth.get("change_24h", 0),
+        },
+        "factor_weights": FACTOR_WEIGHTS,
+        "data_sources": {
+            "F1_technical": "CoinGecko 365-day OHLC (backtested)",
+            "F2_volatility": "CoinGecko real-time + 30-day ATR",
+            "F3_news": "NewsAPI 24h rolling sentiment",
+            "F4_onchain": "Fear & Greed Index + Blockchain.com + Volume analysis",
+        },
+        "disclaimer": DISCLAIMER,
+    }
+
+
 # Include router
 app.include_router(api_router)
 
@@ -3456,6 +3661,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup_preload():
+    """Pre-load market data and run backtests on startup (background task)."""
+    asyncio.create_task(run_preload_and_backtest(data_preloader, scoring_engine))
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
