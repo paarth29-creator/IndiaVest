@@ -274,7 +274,13 @@ async def fetch_market_chart(coin_id: str, days: int = 365, vs_currency: str = "
                 fetched_at = cached.get("fetched_at")
                 age_hours = 999
                 if fetched_at:
-                    age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
+                    # Handle timezone-naive datetimes from MongoDB
+                    if hasattr(fetched_at, 'tzinfo') and fetched_at.tzinfo is None:
+                        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+                    try:
+                        age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
+                    except TypeError:
+                        age_hours = 0  # If comparison fails, assume fresh
 
                 if age_hours < 24:  # Use cache if less than 24 hours old
                     prices = cached["prices"]
@@ -357,14 +363,26 @@ class RegimeBacktester:
     async def backtest_coin(self, coin_id: str, days: int = 365) -> Dict:
         """Run full backtest for one coin. Cached for 24 hours in MongoDB."""
 
-        cached = await self.db[self.collection].find_one({
-            "coin_id": coin_id,
-            "days": days,
-            "computed_at": {"$gte": datetime.now(timezone.utc) - timedelta(hours=24)}
-        })
-        if cached:
-            cached.pop("_id", None)
-            return cached
+        try:
+            cached = await self.db[self.collection].find_one({
+                "coin_id": coin_id,
+                "days": days,
+            })
+            if cached:
+                computed_at = cached.get("computed_at")
+                if computed_at:
+                    if hasattr(computed_at, 'tzinfo') and computed_at.tzinfo is None:
+                        computed_at = computed_at.replace(tzinfo=timezone.utc)
+                    try:
+                        age_hours = (datetime.now(timezone.utc) - computed_at).total_seconds() / 3600
+                        if age_hours < 24:
+                            cached.pop("_id", None)
+                            return cached
+                    except TypeError:
+                        cached.pop("_id", None)
+                        return cached  # If we can't check age, use it
+        except Exception as e:
+            logger.warning(f"Backtest cache lookup failed for {coin_id}: {e}")
 
         chart = await fetch_market_chart(coin_id, days, db=self.db)
         if not chart or len(chart["prices"]) < 60:

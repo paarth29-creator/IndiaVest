@@ -153,26 +153,40 @@ class DataPreloader:
         """Return cache freshness status for all coins."""
         status = {}
         for coin_id in TRACKED_COINS:
-            doc = await self.collection.find_one(
-                {"coin_id": coin_id},
-                {"fetched_at": 1, "data_points": 1, "days": 1}
-            )
-            if doc:
-                age_hours = (datetime.now(timezone.utc) - doc["fetched_at"]).total_seconds() / 3600
-                status[coin_id] = {
-                    "cached": True,
-                    "data_points": doc.get("data_points", 0),
-                    "fetched_at": doc["fetched_at"].isoformat(),
-                    "age_hours": round(age_hours, 1),
-                    "fresh": age_hours < RAW_DATA_TTL_HOURS,
-                }
-            else:
+            try:
+                doc = await self.collection.find_one(
+                    {"coin_id": coin_id},
+                    {"fetched_at": 1, "data_points": 1, "days": 1}
+                )
+                if doc and doc.get("fetched_at"):
+                    fetched_at = doc["fetched_at"]
+                    if not hasattr(fetched_at, 'tzinfo') or fetched_at.tzinfo is None:
+                        fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+                    age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
+                    status[coin_id] = {
+                        "cached": True,
+                        "data_points": doc.get("data_points", 0),
+                        "fetched_at": fetched_at.isoformat(),
+                        "age_hours": round(age_hours, 1),
+                        "fresh": age_hours < RAW_DATA_TTL_HOURS,
+                    }
+                else:
+                    status[coin_id] = {
+                        "cached": False,
+                        "data_points": 0,
+                        "fetched_at": None,
+                        "age_hours": None,
+                        "fresh": False,
+                    }
+            except Exception as e:
+                logger.warning(f"Cache status check failed for {coin_id}: {e}")
                 status[coin_id] = {
                     "cached": False,
                     "data_points": 0,
                     "fetched_at": None,
                     "age_hours": None,
                     "fresh": False,
+                    "error": str(e),
                 }
         return status
 
@@ -180,13 +194,24 @@ class DataPreloader:
 
     async def _get_if_fresh(self, coin_id: str, days: int) -> Optional[Dict]:
         """Check if we have fresh cached data."""
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=RAW_DATA_TTL_HOURS)
-        doc = await self.collection.find_one({
-            "coin_id": coin_id,
-            "days": {"$gte": days},
-            "fetched_at": {"$gte": cutoff}
-        })
-        return doc
+        try:
+            doc = await self.collection.find_one({"coin_id": coin_id, "days": {"$gte": days}})
+            if not doc:
+                return None
+            fetched_at = doc.get("fetched_at")
+            if not fetched_at:
+                return None
+            if hasattr(fetched_at, 'tzinfo') and fetched_at.tzinfo is None:
+                fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+            try:
+                age_hours = (datetime.now(timezone.utc) - fetched_at).total_seconds() / 3600
+                if age_hours < RAW_DATA_TTL_HOURS:
+                    return doc
+            except TypeError:
+                return doc  # If comparison fails, assume fresh
+        except Exception as e:
+            logger.warning(f"Cache freshness check failed for {coin_id}: {e}")
+        return None
 
     async def _fetch_from_coingecko(self, coin_id: str, days: int) -> Optional[Dict]:
         """Fetch daily market chart data from CoinGecko."""
