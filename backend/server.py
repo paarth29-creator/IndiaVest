@@ -41,6 +41,8 @@ from scoring_engine import ScoringEngine, FACTOR_WEIGHTS, SYMBOL_TO_COINGECKO
 from data_preloader import DataPreloader, run_preload_and_backtest
 from outcome_tracker import start_outcome_tracker
 from trade_plan_generator import TradePlanGenerator, CONFIDENCE_THRESHOLDS
+from stock_scoring_engine import StockScoringEngine, TRACKED_STOCKS as STOCK_UNIVERSE, STOCK_THRESHOLDS, get_market_status
+from stock_trade_plan_generator import StockTradePlanGenerator
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -59,10 +61,14 @@ FIREBASE_SERVER_KEY = os.environ.get('FIREBASE_SERVER_KEY', '')
 # Create the main app
 app = FastAPI(title="InvestIQ India - Production Ready", default_response_class=NumpySafeJSONResponse)
 
-# Initialize 4-Factor Scoring Engine
+# Initialize 4-Factor Scoring Engine (Crypto)
 scoring_engine = ScoringEngine(db)
 data_preloader = DataPreloader(db)
 trade_plan_gen = TradePlanGenerator(scoring_engine, None)  # crypto_service set after class definition
+
+# Initialize 5-Factor Scoring Engine (Stocks)
+stock_scoring_engine = StockScoringEngine(db)
+stock_trade_plan_gen = StockTradePlanGenerator(stock_scoring_engine)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -3609,8 +3615,72 @@ async def get_risk_profiles():
     """Get available risk profile options for the UI."""
     return {
         "profiles": CONFIDENCE_THRESHOLDS,
+        "stock_profiles": STOCK_THRESHOLDS,
         "default": "moderate",
     }
+
+
+# ==================== STOCK SCORING ENDPOINTS ====================
+
+@api_router.get("/stocks/trade-plan")
+async def get_stock_trade_plan(
+    budget: float = Query(default=10000, ge=500, le=5000000),
+    risk_profile: str = Query(default="moderate"),
+    max_stocks: int = Query(default=5, ge=1, le=5),
+):
+    """Generate a stock trade plan with YES/NO/WAIT verdict.
+    Only produces YES during market hours (Mon-Fri 9:30 AM - 2:30 PM IST)."""
+    plan = await stock_trade_plan_gen.generate(budget=budget, risk_profile=risk_profile, max_stocks=max_stocks)
+    
+    # Auto-log YES recommendations
+    if plan.get("verdict") == "YES" and plan.get("positions"):
+        try:
+            log_entry = {
+                "log_id": str(uuid.uuid4()),
+                "timestamp": datetime.now(timezone.utc),
+                "recommendation_type": "stock_trade_plan",
+                "recommendation": "BUY",
+                "asset_type": "stocks",
+                "confidence": plan["positions"][0].get("confidence", 0),
+                "assets": [
+                    {"symbol": p["symbol"], "price_at_recommendation": p["current_price"],
+                     "action": "BUY", "amount_inr": p["amount_inr"],
+                     "stop_loss": p["stop_loss"]["price"],
+                     "take_profit_1": p["take_profit"]["tp1"]["price"]}
+                    for p in plan["positions"]
+                ],
+                "capital": budget,
+                "risk_profile": risk_profile,
+                "market_snapshot": plan.get("market_summary", {}),
+                "outcome_24h": None, "outcome_7d": None, "was_profitable": None,
+            }
+            await db.recommendation_logs.insert_one(log_entry)
+        except Exception as e:
+            logger.warning(f"Failed to log stock recommendation: {e}")
+    
+    return plan
+
+
+@api_router.get("/stocks/score/{symbol}")
+async def get_stock_score(symbol: str):
+    """Get full 5-factor score for a single stock."""
+    symbol = symbol.upper()
+    if symbol not in STOCK_UNIVERSE:
+        raise HTTPException(status_code=404, detail=f"Stock {symbol} not in tracked universe. Available: {list(STOCK_UNIVERSE.keys())}")
+    result = await stock_scoring_engine.score(symbol)
+    return result
+
+
+@api_router.get("/stocks/market-status")
+async def get_stock_market_status():
+    """Get current NSE market status."""
+    return get_market_status()
+
+
+@api_router.get("/stocks/universe")
+async def get_stock_universe():
+    """Get list of all tracked stocks."""
+    return {"stocks": STOCK_UNIVERSE, "total": len(STOCK_UNIVERSE)}
 
 
 @api_router.get("/scoring/decision")
@@ -3731,9 +3801,10 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup_preload():
-    """Pre-load market data, run backtests, and start outcome tracker on startup."""
+    """Pre-load market data, run backtests, and start background tasks on startup."""
     asyncio.create_task(run_preload_and_backtest(data_preloader, scoring_engine))
     asyncio.create_task(start_outcome_tracker(db))
+    asyncio.create_task(stock_scoring_engine.warm_cache())
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

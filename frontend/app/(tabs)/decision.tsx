@@ -76,15 +76,20 @@ export default function DecisionScreen() {
   const [expandedPosition, setExpandedPosition] = useState<string | null>(null);
   const [showAllScores, setShowAllScores] = useState(false);
   const [showGlossary, setShowGlossary] = useState(false);
+  const [assetMode, setAssetMode] = useState<'crypto' | 'stocks'>('crypto');
 
   useEffect(() => { fetchPlan(); }, []);
 
-  const fetchPlan = useCallback(async (b?: number, r?: string) => {
+  const fetchPlan = useCallback(async (b?: number, r?: string, mode?: string) => {
     try {
       setLoading(true);
       const useBudget = b ?? budget;
       const useRisk = r ?? riskProfile;
-      const response = await fetch(`${API_URL}/api/scoring/trade-plan?budget=${useBudget}&risk_profile=${useRisk}&max_coins=5`);
+      const useMode = mode ?? assetMode;
+      const endpoint = useMode === 'stocks' 
+        ? `${API_URL}/api/stocks/trade-plan?budget=${useBudget}&risk_profile=${useRisk}&max_stocks=5`
+        : `${API_URL}/api/scoring/trade-plan?budget=${useBudget}&risk_profile=${useRisk}&max_coins=5`;
+      const response = await fetch(endpoint);
       const data = await response.json();
       setPlan(data);
     } catch (error) {
@@ -92,7 +97,7 @@ export default function DecisionScreen() {
     } finally {
       setLoading(false);
     }
-  }, [budget, riskProfile]);
+  }, [budget, riskProfile, assetMode]);
 
   const onRefresh = async () => { setRefreshing(true); await fetchPlan(); setRefreshing(false); };
 
@@ -116,6 +121,13 @@ export default function DecisionScreen() {
   };
 
   const handleRiskChange = (profile: string) => { setRiskProfile(profile); fetchPlan(budget, profile); };
+
+  const handleAssetModeChange = (mode: 'crypto' | 'stocks') => {
+    setAssetMode(mode);
+    setExpandedPosition(null);
+    setShowAllScores(false);
+    fetchPlan(budget, riskProfile, mode);
+  };
 
   const fmt = (v: number | undefined | null) => {
     const safe = v ?? 0;
@@ -151,6 +163,18 @@ export default function DecisionScreen() {
           <TouchableOpacity style={st.learnBtn} onPress={() => setShowGlossary(true)}>
             <Ionicons name="book-outline" size={16} color="#f59e0b" />
             <Text style={st.learnBtnText}>Learn</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Asset Mode Tabs */}
+        <View style={st.tabRow}>
+          <TouchableOpacity style={[st.tab, assetMode === 'crypto' && st.tabActive]} onPress={() => handleAssetModeChange('crypto')}>
+            <Ionicons name="logo-bitcoin" size={16} color={assetMode === 'crypto' ? '#f59e0b' : '#6b7280'} />
+            <Text style={[st.tabText, assetMode === 'crypto' && st.tabTextActive]}>Crypto</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[st.tab, assetMode === 'stocks' && st.tabActive]} onPress={() => handleAssetModeChange('stocks')}>
+            <Ionicons name="trending-up" size={16} color={assetMode === 'stocks' ? '#3b82f6' : '#6b7280'} />
+            <Text style={[st.tabText, assetMode === 'stocks' && st.tabTextActive]}>Stocks</Text>
           </TouchableOpacity>
         </View>
 
@@ -368,4 +392,9 @@ const st = StyleSheet.create({
   taxBannerT: { color: '#f59e0b', fontSize: 11, lineHeight: 16, flex: 1 },
   disc: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: 'rgba(239,68,68,0.08)', borderRadius: 12, padding: 14, marginTop: 8 },
   discT: { color: '#ef4444', fontSize: 11, lineHeight: 16, flex: 1 },
+  tabRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12, borderRadius: 12, backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#2d2d44' },
+  tabActive: { borderColor: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.1)' },
+  tabText: { color: '#6b7280', fontSize: 14, fontWeight: '600' },
+  tabTextActive: { color: '#f59e0b' },
 });
