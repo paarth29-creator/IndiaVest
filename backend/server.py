@@ -1435,6 +1435,29 @@ async def get_stock_prices():
     """Alias for nifty50"""
     return await get_nifty50()
 
+@api_router.get("/stocks/trade-plan")
+async def get_stock_trade_plan(
+    budget: float = Query(default=10000, ge=500, le=5000000),
+    risk_profile: str = Query(default="moderate"),
+    max_stocks: int = Query(default=5, ge=1, le=5),
+):
+    """Generate a stock trade plan with YES/NO/WAIT verdict.
+    Only produces YES during market hours (Mon-Fri 9:30 AM - 2:30 PM IST)."""
+    plan = await stock_trade_plan_gen.generate(budget=budget, risk_profile=risk_profile, max_stocks=max_stocks)
+    return plan
+
+@api_router.get("/stocks/market-status")
+async def get_stock_market_status():
+    """Get current NSE market status"""
+    from stock_scoring_engine import get_market_status
+    return get_market_status()
+
+@api_router.get("/stocks/universe")
+async def get_stock_universe():
+    """Get list of tracked stocks"""
+    from stock_scoring_engine import TRACKED_STOCKS
+    return {"stocks": list(TRACKED_STOCKS.keys()), "count": len(TRACKED_STOCKS)}
+
 @api_router.get("/stocks/{symbol}")
 async def get_stock_detail(symbol: str):
     """Get detailed stock data with fundamentals"""
