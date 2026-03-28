@@ -3678,9 +3678,6 @@ async def get_stock_score(symbol: str):
         raise HTTPException(status_code=404, detail=f"Stock {symbol} not in tracked universe. Available: {list(STOCK_UNIVERSE.keys())}")
     result = await stock_scoring_engine.score(symbol)
     return result
-async def get_stock_universe():
-    """Get list of all tracked stocks."""
-    return {"stocks": STOCK_UNIVERSE, "total": len(STOCK_UNIVERSE)}
 
 
 @api_router.get("/scoring/decision")
