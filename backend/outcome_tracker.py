@@ -31,33 +31,64 @@ CHECK_INTERVAL_SECONDS = 3600  # Run every hour
 
 
 async def get_current_price(symbol: str) -> Optional[float]:
-    """Fetch current price for a symbol from CoinGecko."""
-    symbol_to_id = {
+    """Fetch current price for a crypto or stock symbol."""
+    # Crypto symbols -> CoinGecko
+    crypto_to_id = {
         "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana",
         "BNB": "binancecoin", "XRP": "ripple", "ADA": "cardano",
         "DOGE": "dogecoin", "AVAX": "avalanche-2", "DOT": "polkadot",
-        "LINK": "chainlink",
+        "LINK": "chainlink", "NEAR": "near", "APT": "aptos",
+        "ARB": "arbitrum", "OP": "optimism", "INJ": "injective-protocol",
+        "RENDER": "render-token", "SUI": "sui", "SEI": "sei-network",
+        "TIA": "celestia", "FET": "fetch-ai",
     }
-    coin_id = symbol_to_id.get(symbol.upper())
-    if not coin_id:
+    
+    # Stock symbols -> yfinance
+    stock_symbols = {
+        "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN",
+        "BHARTIARTL", "BAJFINANCE", "LT", "MARUTI", "SUNPHARMA",
+        "TATAMOTORS", "NTPC", "TITAN", "ADANIENT", "ONGC",
+        "JSWSTEEL", "WIPRO", "COALINDIA", "ITC",
+    }
+
+    upper = symbol.upper()
+
+    # Try crypto first
+    coin_id = crypto_to_id.get(upper)
+    if coin_id:
+        try:
+            headers = {}
+            if COINGECKO_API_KEY:
+                headers["x-cg-demo-api-key"] = COINGECKO_API_KEY
+            async with httpx.AsyncClient(timeout=15) as client:
+                response = await client.get(
+                    f"{COINGECKO_BASE_URL}/simple/price",
+                    params={"ids": coin_id, "vs_currencies": "inr"},
+                    headers=headers
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    return data.get(coin_id, {}).get("inr")
+        except Exception as e:
+            logger.warning(f"Crypto price fetch failed for {symbol}: {e}")
         return None
 
-    try:
-        headers = {}
-        if COINGECKO_API_KEY:
-            headers["x-cg-demo-api-key"] = COINGECKO_API_KEY
+    # Try stock
+    if upper in stock_symbols:
+        try:
+            import yfinance as yf
+            import asyncio
+            loop = asyncio.get_event_loop()
+            def _fetch():
+                ticker = yf.Ticker(f"{upper}.NS")
+                info = ticker.info
+                return info.get("currentPrice") or info.get("regularMarketPrice")
+            price = await loop.run_in_executor(None, _fetch)
+            return float(price) if price else None
+        except Exception as e:
+            logger.warning(f"Stock price fetch failed for {symbol}: {e}")
+        return None
 
-        async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.get(
-                f"{COINGECKO_BASE_URL}/simple/price",
-                params={"ids": coin_id, "vs_currencies": "inr"},
-                headers=headers
-            )
-            if response.status_code == 200:
-                data = response.json()
-                return data.get(coin_id, {}).get("inr")
-    except Exception as e:
-        logger.warning(f"Price fetch failed for {symbol}: {e}")
     return None
 
 
@@ -80,7 +111,13 @@ async def check_outcomes(db) -> Dict:
         for rec in pending_24h:
             stats["checked"] += 1
             try:
+                # Handle both formats:
+                # Old format: rec["assets"] = [{"symbol": "BTC", "price_at_recommendation": 64000}, ...]
+                # Bot format: rec["symbol"] = "BTC", rec["price_at_recommendation"] = 64000
                 assets = rec.get("assets", [])
+                if not assets and rec.get("symbol") and rec.get("price_at_recommendation"):
+                    assets = [{"symbol": rec["symbol"], "price_at_recommendation": rec["price_at_recommendation"]}]
+                
                 if not assets:
                     continue
 
@@ -139,6 +176,9 @@ async def check_outcomes(db) -> Dict:
             stats["checked"] += 1
             try:
                 assets = rec.get("assets", [])
+                if not assets and rec.get("symbol") and rec.get("price_at_recommendation"):
+                    assets = [{"symbol": rec["symbol"], "price_at_recommendation": rec["price_at_recommendation"]}]
+                
                 if not assets:
                     continue
 
