@@ -43,12 +43,19 @@ async def get_current_price(symbol: str) -> Optional[float]:
         "TIA": "celestia", "FET": "fetch-ai",
     }
     
-    # Stock symbols -> yfinance
+    # Stock symbols -> yfinance (all 50 Nifty stocks)
     stock_symbols = {
         "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK", "SBIN",
         "BHARTIARTL", "BAJFINANCE", "LT", "MARUTI", "SUNPHARMA",
         "TATAMOTORS", "NTPC", "TITAN", "ADANIENT", "ONGC",
         "JSWSTEEL", "WIPRO", "COALINDIA", "ITC",
+        "HINDUNILVR", "AXISBANK", "KOTAKBANK", "HCLTECH", "TECHM",
+        "NESTLEIND", "ULTRACEMCO", "POWERGRID", "TATASTEEL", "ADANIPORTS",
+        "DRREDDY", "CIPLA", "DIVISLAB", "EICHERMOT", "GRASIM",
+        "HEROMOTOCO", "HINDALCO", "INDUSINDBK", "M&M",
+        "BAJAJ-AUTO", "BAJAJFINSV", "BPCL", "BRITANNIA", "HDFCLIFE",
+        "SBILIFE", "SHREECEM", "TATACONSUM", "UPL", "VEDL",
+        "ASIANPAINT",
     }
 
     upper = symbol.upper()

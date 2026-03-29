@@ -84,23 +84,40 @@ class TradePlanGenerator:
         thresholds = CONFIDENCE_THRESHOLDS.get(risk_profile, CONFIDENCE_THRESHOLDS["moderate"])
         max_coins = max(MIN_POSITIONS, min(MAX_POSITIONS, max_coins))
 
-        # Step 1: Get current prices for all coins
-        crypto_prices = await self.crypto.get_prices()
-        if not crypto_prices:
-            return self._no_trade_plan(
-                "WAIT",
-                "Unable to fetch current market prices. Cannot generate a trade plan without live data. Try again in a few minutes.",
-                budget, risk_profile
-            )
+        # Step 1: Get market prices (top coins by market cap)
+        crypto_prices = {}
+        try:
+            crypto_prices = await self.crypto.get_prices() or {}
+        except Exception as e:
+            logger.warning(f"get_prices failed: {e}")
 
-        # Step 2: Score all available coins
+        # Step 2: Score ALL 20 curated coins (not just what get_prices returns)
+        from scoring_engine import SYMBOL_TO_COINGECKO
+        from data_preloader import DataPreloader
+
         scored_coins = []
-        for symbol, price_data in crypto_prices.items():
+        for symbol, coin_id in SYMBOL_TO_COINGECKO.items():
             try:
+                # Get price: prefer live data from get_prices, fall back to cached data
+                price_data = crypto_prices.get(symbol, {})
+                price_inr = price_data.get("price_inr", 0)
+                
+                # If this coin isn't in the top 20 market cap list, get price from cache
+                if not price_inr and self.engine.db is not None:
+                    try:
+                        cached = await self.engine.db["market_data_cache"].find_one({"coin_id": coin_id})
+                        if cached and cached.get("prices"):
+                            price_inr = cached["prices"][-1]  # Most recent cached price
+                    except Exception:
+                        pass
+
+                if not price_inr:
+                    continue  # Can't trade without a price
+
                 score_result = await self.engine.score(
                     symbol,
                     volume_24h=price_data.get("volume_24h", 0),
-                    volume_avg=price_data.get("volume_24h", 0) * 0.8,
+                    volume_avg=price_data.get("volume_24h", 0) * 0.8 if price_data.get("volume_24h") else 0,
                 )
                 scored_coins.append({
                     "symbol": symbol,
@@ -110,7 +127,7 @@ class TradePlanGenerator:
                     "confidence": score_result["confidence"],
                     "factors": score_result.get("factors", []),
                     "factor_details": score_result.get("factor_details", {}),
-                    "price_inr": price_data.get("price_inr", 0),
+                    "price_inr": price_inr,
                     "change_24h": price_data.get("change_24h", 0),
                     "volume_24h": price_data.get("volume_24h", 0),
                     "high_24h": price_data.get("high_24h", 0),
@@ -150,7 +167,7 @@ class TradePlanGenerator:
             # Overall bearish: suggest not trading
             verdict = "NO"
             verdict_reason = (
-                f"{sell_count} out of {len(scored_coins[:10])} analyzed coins show sell signals. "
+                f"{sell_count} out of {len(scored_coins[:20])} analyzed coins show sell signals. "
                 f"Market conditions are unfavorable. Protect your capital today."
             )
             return self._no_trade_plan(verdict, verdict_reason, budget, risk_profile,
@@ -325,7 +342,7 @@ class TradePlanGenerator:
             "all_scores": [
                 {"symbol": c["symbol"], "name": c["name"], "score": round(c["score"], 1), 
                  "action": c["action"], "change_24h": round(c["change_24h"], 2)}
-                for c in scored_coins[:10]
+                for c in scored_coins[:20]
             ],
             "disclaimer": "This is NOT financial advice. Past performance does not guarantee future results. High risk of capital loss. Virtual/educational use only. Crypto taxed at 30% (VDA) + 1% TDS in India.",
         }
@@ -414,8 +431,8 @@ class TradePlanGenerator:
         btc = crypto_prices.get("BTC", {})
         eth = crypto_prices.get("ETH", {})
         
-        bullish_count = sum(1 for c in scored_coins[:10] if c["score"] > 20)
-        bearish_count = sum(1 for c in scored_coins[:10] if c["score"] < -20)
+        bullish_count = sum(1 for c in scored_coins[:20] if c["score"] > 20)
+        bearish_count = sum(1 for c in scored_coins[:20] if c["score"] < -20)
         
         if bullish_count > bearish_count + 2:
             mood = "Bullish"

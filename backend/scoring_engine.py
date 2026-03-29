@@ -46,8 +46,7 @@ SYMBOL_TO_COINGECKO = {
     "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana",
     "BNB": "binancecoin", "XRP": "ripple", "ADA": "cardano",
     "DOGE": "dogecoin", "AVAX": "avalanche-2", "DOT": "polkadot",
-    "LINK": "chainlink", "MATIC": "matic-network", "UNI": "uniswap",
-    "LTC": "litecoin", "ATOM": "cosmos", "NEAR": "near",
+    "LINK": "chainlink", "NEAR": "near",
     "APT": "aptos", "ARB": "arbitrum", "OP": "optimism",
     "INJ": "injective-protocol", "RENDER": "render-token",
     "SUI": "sui", "SEI": "sei-network", "TIA": "celestia", "FET": "fetch-ai"

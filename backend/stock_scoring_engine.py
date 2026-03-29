@@ -45,26 +45,69 @@ NEWSAPI_KEY = os.environ.get('NEWSAPI_KEY', '')
 # STOCK UNIVERSE: Top 20 Nifty 50 by liquidity
 # ====================================================================
 TRACKED_STOCKS = {
-    "RELIANCE":   {"name": "Reliance Industries", "sector": "Energy",        "yf": "RELIANCE.NS"},
-    "TCS":        {"name": "Tata Consultancy",    "sector": "IT",            "yf": "TCS.NS"},
-    "HDFCBANK":   {"name": "HDFC Bank",           "sector": "Banking",       "yf": "HDFCBANK.NS"},
-    "INFY":       {"name": "Infosys",             "sector": "IT",            "yf": "INFY.NS"},
-    "ICICIBANK":  {"name": "ICICI Bank",          "sector": "Banking",       "yf": "ICICIBANK.NS"},
-    "SBIN":       {"name": "State Bank of India", "sector": "Banking",       "yf": "SBIN.NS"},
-    "BHARTIARTL": {"name": "Bharti Airtel",       "sector": "Telecom",       "yf": "BHARTIARTL.NS"},
-    "BAJFINANCE": {"name": "Bajaj Finance",       "sector": "NBFC",          "yf": "BAJFINANCE.NS"},
-    "LT":         {"name": "Larsen & Toubro",     "sector": "Infrastructure","yf": "LT.NS"},
-    "MARUTI":     {"name": "Maruti Suzuki",       "sector": "Auto",          "yf": "MARUTI.NS"},
-    "SUNPHARMA":  {"name": "Sun Pharma",          "sector": "Pharma",        "yf": "SUNPHARMA.NS"},
-    "TATAMOTORS": {"name": "Tata Motors",         "sector": "Auto",          "yf": "TATAMOTORS.NS"},
-    "NTPC":       {"name": "NTPC",                "sector": "Power",         "yf": "NTPC.NS"},
-    "TITAN":      {"name": "Titan Company",       "sector": "Consumer",      "yf": "TITAN.NS"},
-    "ADANIENT":   {"name": "Adani Enterprises",   "sector": "Conglomerate",  "yf": "ADANIENT.NS"},
-    "ONGC":       {"name": "ONGC",                "sector": "Energy",        "yf": "ONGC.NS"},
-    "JSWSTEEL":   {"name": "JSW Steel",           "sector": "Metals",        "yf": "JSWSTEEL.NS"},
-    "WIPRO":      {"name": "Wipro",               "sector": "IT",            "yf": "WIPRO.NS"},
-    "COALINDIA":  {"name": "Coal India",          "sector": "Mining",        "yf": "COALINDIA.NS"},
-    "ITC":        {"name": "ITC",                 "sector": "FMCG",          "yf": "ITC.NS"},
+    # Energy & Resources
+    "RELIANCE":   {"name": "Reliance Industries", "sector": "Energy",         "yf": "RELIANCE.NS"},
+    "ONGC":       {"name": "ONGC",                "sector": "Energy",         "yf": "ONGC.NS"},
+    "BPCL":       {"name": "Bharat Petroleum",    "sector": "Energy",         "yf": "BPCL.NS"},
+    "COALINDIA":  {"name": "Coal India",          "sector": "Mining",         "yf": "COALINDIA.NS"},
+    # IT
+    "TCS":        {"name": "Tata Consultancy",    "sector": "IT",             "yf": "TCS.NS"},
+    "INFY":       {"name": "Infosys",             "sector": "IT",             "yf": "INFY.NS"},
+    "WIPRO":      {"name": "Wipro",               "sector": "IT",             "yf": "WIPRO.NS"},
+    "HCLTECH":    {"name": "HCL Technologies",    "sector": "IT",             "yf": "HCLTECH.NS"},
+    "TECHM":      {"name": "Tech Mahindra",       "sector": "IT",             "yf": "TECHM.NS"},
+    # Banking
+    "HDFCBANK":   {"name": "HDFC Bank",           "sector": "Banking",        "yf": "HDFCBANK.NS"},
+    "ICICIBANK":  {"name": "ICICI Bank",          "sector": "Banking",        "yf": "ICICIBANK.NS"},
+    "SBIN":       {"name": "State Bank of India", "sector": "Banking",        "yf": "SBIN.NS"},
+    "AXISBANK":   {"name": "Axis Bank",           "sector": "Banking",        "yf": "AXISBANK.NS"},
+    "KOTAKBANK":  {"name": "Kotak Mahindra Bank", "sector": "Banking",        "yf": "KOTAKBANK.NS"},
+    "INDUSINDBK": {"name": "IndusInd Bank",       "sector": "Banking",        "yf": "INDUSINDBK.NS"},
+    # NBFC & Insurance
+    "BAJFINANCE": {"name": "Bajaj Finance",       "sector": "NBFC",           "yf": "BAJFINANCE.NS"},
+    "BAJAJFINSV": {"name": "Bajaj Finserv",       "sector": "NBFC",           "yf": "BAJAJFINSV.NS"},
+    "HDFCLIFE":   {"name": "HDFC Life Insurance", "sector": "Insurance",      "yf": "HDFCLIFE.NS"},
+    "SBILIFE":    {"name": "SBI Life Insurance",  "sector": "Insurance",      "yf": "SBILIFE.NS"},
+    # Auto
+    "MARUTI":     {"name": "Maruti Suzuki",       "sector": "Auto",           "yf": "MARUTI.NS"},
+    "TATAMOTORS": {"name": "Tata Motors",         "sector": "Auto",           "yf": "TATAMTRDVR.NS"},
+    "EICHERMOT":  {"name": "Eicher Motors",       "sector": "Auto",           "yf": "EICHERMOT.NS"},
+    "BAJAJ-AUTO": {"name": "Bajaj Auto",          "sector": "Auto",           "yf": "BAJAJ-AUTO.NS"},
+    "M&M":        {"name": "Mahindra & Mahindra", "sector": "Auto",           "yf": "M&M.NS"},
+    "HEROMOTOCO": {"name": "Hero MotoCorp",       "sector": "Auto",           "yf": "HEROMOTOCO.NS"},
+    # Pharma
+    "SUNPHARMA":  {"name": "Sun Pharma",          "sector": "Pharma",         "yf": "SUNPHARMA.NS"},
+    "DRREDDY":    {"name": "Dr Reddys Labs",      "sector": "Pharma",         "yf": "DRREDDY.NS"},
+    "CIPLA":      {"name": "Cipla",               "sector": "Pharma",         "yf": "CIPLA.NS"},
+    "DIVISLAB":   {"name": "Divis Laboratories",  "sector": "Pharma",         "yf": "DIVISLAB.NS"},
+    # Telecom
+    "BHARTIARTL": {"name": "Bharti Airtel",       "sector": "Telecom",        "yf": "BHARTIARTL.NS"},
+    # Infrastructure & Industrials
+    "LT":         {"name": "Larsen & Toubro",     "sector": "Infrastructure", "yf": "LT.NS"},
+    "ULTRACEMCO": {"name": "UltraTech Cement",    "sector": "Cement",         "yf": "ULTRACEMCO.NS"},
+    "SHREECEM":   {"name": "Shree Cement",        "sector": "Cement",         "yf": "SHREECEM.NS"},
+    "GRASIM":     {"name": "Grasim Industries",   "sector": "Cement",         "yf": "GRASIM.NS"},
+    # Metals
+    "JSWSTEEL":   {"name": "JSW Steel",           "sector": "Metals",         "yf": "JSWSTEEL.NS"},
+    "TATASTEEL":  {"name": "Tata Steel",          "sector": "Metals",         "yf": "TATASTEEL.NS"},
+    "HINDALCO":   {"name": "Hindalco Industries", "sector": "Metals",         "yf": "HINDALCO.NS"},
+    "VEDL":       {"name": "Vedanta",             "sector": "Metals",         "yf": "VEDL.NS"},
+    # Power & Utilities
+    "NTPC":       {"name": "NTPC",                "sector": "Power",          "yf": "NTPC.NS"},
+    "POWERGRID":  {"name": "Power Grid Corp",     "sector": "Power",          "yf": "POWERGRID.NS"},
+    # Consumer & FMCG
+    "HINDUNILVR": {"name": "Hindustan Unilever",  "sector": "FMCG",           "yf": "HINDUNILVR.NS"},
+    "ITC":        {"name": "ITC",                 "sector": "FMCG",           "yf": "ITC.NS"},
+    "NESTLEIND":  {"name": "Nestle India",        "sector": "FMCG",           "yf": "NESTLEIND.NS"},
+    "BRITANNIA":  {"name": "Britannia Industries","sector": "FMCG",           "yf": "BRITANNIA.NS"},
+    "TATACONSUM": {"name": "Tata Consumer",       "sector": "FMCG",           "yf": "TATACONSUM.NS"},
+    "TITAN":      {"name": "Titan Company",       "sector": "Consumer",       "yf": "TITAN.NS"},
+    "ASIANPAINT": {"name": "Asian Paints",        "sector": "Consumer",       "yf": "ASIANPAINT.NS"},
+    # Conglomerate
+    "ADANIENT":   {"name": "Adani Enterprises",   "sector": "Conglomerate",   "yf": "ADANIENT.NS"},
+    "ADANIPORTS": {"name": "Adani Ports",         "sector": "Logistics",      "yf": "ADANIPORTS.NS"},
+    # Agri & Chemicals
+    "UPL":        {"name": "UPL Limited",         "sector": "Chemicals",      "yf": "UPL.NS"},
 }
 
 # Sector average PE ratios (approximate, updated periodically)
@@ -72,6 +115,7 @@ SECTOR_AVG_PE = {
     "Banking": 14, "IT": 28, "Energy": 12, "Pharma": 30, "Auto": 22,
     "NBFC": 20, "Telecom": 35, "Infrastructure": 25, "Power": 15,
     "Consumer": 55, "Conglomerate": 30, "Metals": 10, "Mining": 8, "FMCG": 25,
+    "Insurance": 60, "Cement": 30, "Logistics": 25, "Chemicals": 20,
 }
 
 # Stock factor weights

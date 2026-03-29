@@ -3733,7 +3733,7 @@ async def bot_run_cycle():
                         "stop_loss": pos["stop_loss"]["price"],
                         "take_profit_1": pos["take_profit"]["tp1"]["price"],
                         "take_profit_2": pos["take_profit"]["tp2"]["price"],
-                        "factor_scores": {f["factor"]: f["raw_score"] for f in plan.get("factors", []) if "factor" in f},
+                        "factor_scores": {},
                         "outcome_24h": None,
                         "outcome_7d": None,
                         "was_profitable": None,
