@@ -881,15 +881,31 @@ class StockScoringEngine:
         }
 
     async def score_all(self) -> Dict[str, Dict]:
-        """Score all 20 tracked stocks."""
+        """Score all 50 tracked stocks in parallel batches of 10."""
         results = {}
-        for symbol in TRACKED_STOCKS:
-            try:
-                results[symbol] = await self.score(symbol)
-                await asyncio.sleep(0.5)  # Rate limit
-            except Exception as e:
-                logger.error(f"Stock scoring failed for {symbol}: {e}")
+        symbols = list(TRACKED_STOCKS.keys())
+        batch_size = 10
+        
+        for i in range(0, len(symbols), batch_size):
+            batch = symbols[i:i + batch_size]
+            tasks = []
+            for symbol in batch:
+                tasks.append(self._safe_score(symbol))
+            batch_results = await asyncio.gather(*tasks)
+            for symbol, result in zip(batch, batch_results):
+                if result is not None:
+                    results[symbol] = result
+            await asyncio.sleep(1)  # Brief pause between batches
+        
         return results
+    
+    async def _safe_score(self, symbol: str) -> Optional[Dict]:
+        """Score a single stock with error handling. Used by parallel score_all."""
+        try:
+            return await self.score(symbol)
+        except Exception as e:
+            logger.error(f"Stock scoring failed for {symbol}: {e}")
+            return None
 
     async def warm_cache(self):
         """Pre-fetch data for all stocks. Call at startup."""

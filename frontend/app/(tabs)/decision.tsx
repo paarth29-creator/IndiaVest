@@ -140,7 +140,7 @@ export default function DecisionScreen() {
       <SafeAreaView style={st.container} edges={['top']}>
         <View style={st.loadingWrap}>
           <ActivityIndicator size="large" color="#f59e0b" />
-          <Text style={st.loadingText}>Analyzing 20 coins across 4 factors...</Text>
+          <Text style={st.loadingText}>{assetMode === 'stocks' ? 'Analyzing 50 stocks across 5 factors...' : 'Analyzing 20 coins across 4 factors...'}</Text>
         </View>
       </SafeAreaView>
     );
@@ -263,7 +263,7 @@ export default function DecisionScreen() {
                           );
                         })}
                       </View>
-                      <View style={st.taxNote}><Ionicons name="receipt-outline" size={14} color="#f59e0b" /><Text style={st.taxNoteT}>After 30% VDA tax: TP1 nets {fmt(pos.take_profit.tp1.after_tax)}, TP2 nets {fmt(pos.take_profit.tp2.after_tax)}. Loss of {fmt(pos.stop_loss.loss_inr)} cannot be offset.</Text></View>
+                      <View style={st.taxNote}><Ionicons name="receipt-outline" size={14} color="#f59e0b" /><Text style={st.taxNoteT}>{assetMode === 'stocks' ? `After 15% STCG tax: TP1 nets ${fmt(pos.take_profit.tp1.after_tax)}, TP2 nets ${fmt(pos.take_profit.tp2.after_tax)}.` : `After 30% VDA tax: TP1 nets ${fmt(pos.take_profit.tp1.after_tax)}, TP2 nets ${fmt(pos.take_profit.tp2.after_tax)}. Loss of ${fmt(pos.stop_loss.loss_inr)} cannot be offset.`}</Text></View>
                       <Text style={st.reasoning}>{pos.reasoning_summary}</Text>
                     </View>
                   )}
@@ -288,8 +288,12 @@ export default function DecisionScreen() {
           <View style={st.mktSec}>
             <Text style={st.secTitle}>Market snapshot</Text>
             <View style={st.mktRow}>
-              <View style={st.mktCard}><Text style={st.mktLbl}>BTC</Text><Text style={st.mktPrice}>{fmt(plan.market_summary.btc_price)}</Text><Text style={[st.mktChg, { color: (plan.market_summary.btc_change ?? 0) >= 0 ? '#10b981' : '#ef4444' }]}>{(plan.market_summary.btc_change ?? 0) >= 0 ? '+' : ''}{plan.market_summary.btc_change?.toFixed(1)}%</Text></View>
-              <View style={st.mktCard}><Text style={st.mktLbl}>ETH</Text><Text style={st.mktPrice}>{fmt(plan.market_summary.eth_price)}</Text><Text style={[st.mktChg, { color: (plan.market_summary.eth_change ?? 0) >= 0 ? '#10b981' : '#ef4444' }]}>{(plan.market_summary.eth_change ?? 0) >= 0 ? '+' : ''}{plan.market_summary.eth_change?.toFixed(1)}%</Text></View>
+              {assetMode === 'crypto' && plan.market_summary.btc_price ? (
+                <>
+                  <View style={st.mktCard}><Text style={st.mktLbl}>BTC</Text><Text style={st.mktPrice}>{fmt(plan.market_summary.btc_price)}</Text><Text style={[st.mktChg, { color: (plan.market_summary.btc_change ?? 0) >= 0 ? '#10b981' : '#ef4444' }]}>{(plan.market_summary.btc_change ?? 0) >= 0 ? '+' : ''}{plan.market_summary.btc_change?.toFixed(1)}%</Text></View>
+                  <View style={st.mktCard}><Text style={st.mktLbl}>ETH</Text><Text style={st.mktPrice}>{fmt(plan.market_summary.eth_price)}</Text><Text style={[st.mktChg, { color: (plan.market_summary.eth_change ?? 0) >= 0 ? '#10b981' : '#ef4444' }]}>{(plan.market_summary.eth_change ?? 0) >= 0 ? '+' : ''}{plan.market_summary.eth_change?.toFixed(1)}%</Text></View>
+                </>
+              ) : null}
               <View style={st.mktCard}><Text style={st.mktLbl}>Mood</Text><Text style={st.mktMood}>{plan.market_summary.mood}</Text><Text style={st.mktMoodDet} numberOfLines={2}>{plan.market_summary.mood_detail}</Text></View>
             </View>
           </View>
@@ -299,18 +303,18 @@ export default function DecisionScreen() {
         {plan?.all_scores && plan.all_scores.length > 0 && (
           <View style={st.allSec}>
             <TouchableOpacity style={st.allHead} onPress={() => setShowAllScores(!showAllScores)}>
-              <Text style={st.secTitle}>All coin scores ({plan.all_scores.length})</Text>
+              <Text style={st.secTitle}>{assetMode === 'stocks' ? 'All stock scores' : 'All coin scores'} ({plan.all_scores.length})</Text>
               <Ionicons name={showAllScores ? 'chevron-up' : 'chevron-down'} size={18} color="#6b7280" />
             </TouchableOpacity>
-            {showAllScores && plan.all_scores.map((c) => {
+            {showAllScores && plan.all_scores.map((c: any) => {
               const ac = c.action === 'BUY' ? '#10b981' : c.action === 'SELL' ? '#ef4444' : '#f59e0b';
-              return (<View key={c.symbol} style={st.scRow}><Text style={st.scSym}>{c.symbol}</Text><View style={[st.scBadge, { backgroundColor: ac + '20' }]}><Text style={[st.scBadgeT, { color: ac }]}>{c.action}</Text></View><Text style={st.scVal}>{c.score >= 0 ? '+' : ''}{c.score.toFixed(1)}</Text><Text style={[st.scChg, { color: c.change_24h >= 0 ? '#10b981' : '#ef4444' }]}>{c.change_24h >= 0 ? '+' : ''}{c.change_24h.toFixed(1)}%</Text></View>);
+              return (<View key={c.symbol} style={st.scRow}><View style={{flex:1}}><Text style={st.scSym}>{c.symbol}</Text>{c.sector ? <Text style={{color:'#6b7280',fontSize:10}}>{c.sector}</Text> : null}</View><View style={[st.scBadge, { backgroundColor: ac + '20' }]}><Text style={[st.scBadgeT, { color: ac }]}>{c.action}</Text></View><Text style={st.scVal}>{c.score >= 0 ? '+' : ''}{c.score.toFixed(1)}</Text><Text style={[st.scChg, { color: c.change_24h >= 0 ? '#10b981' : '#ef4444' }]}>{c.change_24h >= 0 ? '+' : ''}{c.change_24h.toFixed(1)}%</Text></View>);
             })}
           </View>
         )}
 
         {/* DISCLAIMER */}
-        <View style={st.disc}><Ionicons name="alert-circle" size={16} color="#ef4444" /><Text style={st.discT}>NOT financial advice. Past performance does not guarantee future results. Crypto taxed at 30% (VDA) + 1% TDS in India. Educational use only. Never invest money you cannot afford to lose.</Text></View>
+        <View style={st.disc}><Ionicons name="alert-circle" size={16} color="#ef4444" /><Text style={st.discT}>{assetMode === 'stocks' ? 'NOT financial advice. Past performance does not guarantee future results. STCG taxed at 15% for holdings under 1 year. Consult a SEBI-registered advisor. Educational use only.' : 'NOT financial advice. Past performance does not guarantee future results. Crypto taxed at 30% (VDA) + 1% TDS in India. Educational use only. Never invest money you cannot afford to lose.'}</Text></View>
       </ScrollView>
     </SafeAreaView>
   );

@@ -95,7 +95,7 @@ class StockTradePlanGenerator:
         buy_candidates = [s for s in scored if s["score"] >= thresholds["buy"]]
         sell_candidates = [s for s in scored if s["score"] <= thresholds["sell"]]
 
-        avg_score = float(np.mean([s["score"] for s in scored[:10]]))
+        avg_score = float(np.mean([s["score"] for s in scored[:20]]))
 
         if not buy_candidates:
             best = scored[0]
@@ -108,7 +108,7 @@ class StockTradePlanGenerator:
                 market_summary=self._market_summary(scored),
                 all_scores=[{"symbol": s["symbol"], "name": s["name"], "sector": s["sector"],
                              "score": round(s["score"], 1), "action": s["action"],
-                             "change_24h": round(s["change_24h"], 2)} for s in scored[:10]])
+                             "change_24h": round(s["change_24h"], 2)} for s in scored[:20]])
 
         if sell_candidates and len(sell_candidates) > len(buy_candidates):
             return self._no_plan("NO",
@@ -251,7 +251,7 @@ class StockTradePlanGenerator:
             "market_summary": self._market_summary(scored),
             "all_scores": [{"symbol": s["symbol"], "name": s["name"], "sector": s["sector"],
                             "score": round(s["score"], 1), "action": s["action"],
-                            "change_24h": round(s["change_24h"], 2)} for s in scored[:10]],
+                            "change_24h": round(s["change_24h"], 2)} for s in scored[:20]],
             "disclaimer": "NOT financial advice. Past performance does not guarantee future results. Consult a SEBI-registered advisor. STCG taxed at 15% for holdings <1 year.",
         }
 
@@ -288,8 +288,8 @@ class StockTradePlanGenerator:
         }
 
     def _market_summary(self, scored):
-        bullish = sum(1 for s in scored[:10] if s["score"] > 15)
-        bearish = sum(1 for s in scored[:10] if s["score"] < -15)
+        bullish = sum(1 for s in scored[:20] if s["score"] > 15)
+        bearish = sum(1 for s in scored[:20] if s["score"] < -15)
         if bullish > bearish + 2:
             mood, detail = "Bullish", f"{bullish}/10 stocks positive"
         elif bearish > bullish + 2:
