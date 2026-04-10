@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 CONFIDENCE_THRESHOLDS = {
     "conservative": {"buy": 55, "sell": -55, "label": "Conservative", "desc": "Fewer signals, higher conviction. Only trades when most factors strongly agree."},
     "moderate":     {"buy": 40, "sell": -40, "label": "Moderate",     "desc": "Balanced approach. Default setting. Trades when factors show reasonable agreement."},
-    "aggressive":   {"buy": 25, "sell": -25, "label": "Aggressive",   "desc": "More frequent signals, lower conviction threshold. Higher risk of false signals."},
+    "aggressive":   {"buy": 5, "sell": -25, "label": "Aggressive",   "desc": "More frequent signals, lower conviction threshold. Higher risk of false signals."},
 }
 
 # Position sizing rules
