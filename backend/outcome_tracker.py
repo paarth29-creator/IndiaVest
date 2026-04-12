@@ -322,8 +322,8 @@ async def _bot_loop(db):
                 "event": "IMPORT_FAILURE",
                 "error": str(e),
             })
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"Failed to write IMPORT_FAILURE diagnostic: {e}")
         return
 
     # Create engine instances
@@ -345,8 +345,9 @@ async def _bot_loop(db):
             "event": "BOT_STARTED",
             "crypto_service": "BotCryptoService (direct CoinGecko)",
         })
-    except:
-        pass
+        logger.info("BOT_STARTED diagnostic written successfully")
+    except Exception as e:
+        logger.error(f"Failed to write BOT_STARTED diagnostic: {e}")
 
     while True:
         cycle_start = datetime.now(timezone.utc)
