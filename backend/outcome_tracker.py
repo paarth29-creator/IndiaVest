@@ -472,9 +472,11 @@ async def _bot_loop(db):
 
         # DIAGNOSTIC: Write this cycle's results to MongoDB NO MATTER WHAT
         try:
-            await db.bot_diagnostics.insert_one(diag)
+            logger.info(f"DIAG_WRITE: Attempting insert to bot_diagnostics. db type={type(db).__name__}")
+            result = await db.bot_diagnostics.insert_one(diag)
+            logger.info(f"DIAG_WRITE: SUCCESS inserted_id={result.inserted_id}")
         except Exception as e:
-            logger.error(f"Failed to write diagnostic: {e}")
+            logger.error(f"DIAG_WRITE: FAILED error={e}, type={type(e).__name__}")
 
         await asyncio.sleep(BOT_CYCLE_INTERVAL)
 
